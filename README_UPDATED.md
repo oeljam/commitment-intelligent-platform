@@ -16,12 +16,50 @@ pip install flask boto3 pdfplumber
 # Configure AWS credentials
 aws configure
 
+# Start MCP servers (see MCP_SERVER_REQUIREMENTS.md)
+python3 aws_billing_server.py --port 3010 &
+python3 outlook_calendar_server.py --port 3011 &
+
 # Start platform
 python3 complete_intelligent_dashboard.py
 
 # Open browser
 open http://localhost:5000
 ```
+
+## 🏗️ Architecture with MCP Servers
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│              Commitment Intelligent Platform               │
+│         (complete_intelligent_dashboard.py)                │
+└─────────────────────┬───────────────────────────────────────┘
+                      │
+        ┌─────────────┼─────────────┐
+        │             │             │
+        ▼             ▼             ▼
+┌─────────────┐ ┌─────────────┐ ┌─────────────┐
+│AWS Billing  │ │ Outlook     │ │ Document    │
+│MCP Server   │ │ Calendar    │ │ Processing  │
+│Port: 3010   │ │ MCP Server  │ │ MCP Server  │
+│Status: ✅   │ │ Status: ⚠️  │ │ Status: 🆕  │
+└─────────────┘ └─────────────┘ └─────────────┘
+```
+
+## 🔧 MCP Server Requirements
+
+### ✅ Existing MCP Servers
+- **AWS Billing MCP Server** (Port 3010) - Real-time cost data
+
+### ⚠️ Enhancement Needed  
+- **Outlook Calendar MCP Server** (Port 3011) - Needs calendar creation capability
+
+### 🆕 New MCP Servers Required
+- **Document Processing MCP Server** (Port 3012) - Advanced PDF template extraction
+- **Learning Analytics MCP Server** (Port 3013) - User feedback and personalization  
+- **Notification MCP Server** (Port 3014) - Multi-channel alerting
+
+**📋 See [MCP_SERVER_REQUIREMENTS.md](MCP_SERVER_REQUIREMENTS.md) for complete implementation details**
 
 ## ✨ Key Features
 
@@ -54,71 +92,52 @@ open http://localhost:5000
 
 ## 📋 Requirements
 
+### Core Requirements
 - **Python 3.8+**
 - **AWS Account** with Cost Explorer API access
 - **Valid PPA/EDP Agreement**
 - **Flask, boto3, pdfplumber** (auto-installed)
 
-## 🏗️ Architecture
-
-```
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   Dashboard     │    │  Credit Engine   │    │ Attestation     │
-│   (Flask App)   │◄──►│  (AI Analysis)   │◄──►│ Calendar System │
-└─────────────────┘    └──────────────────┘    └─────────────────┘
-         │                        │                        │
-         ▼                        ▼                        ▼
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   AWS Cost      │    │   PDF Processor  │    │  Learning Loop  │
-│   Explorer API  │    │   (Document AI)  │    │  (User Feedback)│
-└─────────────────┘    └──────────────────┘    └─────────────────┘
-```
-
-## 🎬 Demo
-
-### Live Demo Environment
-- **Production Demo**: [https://demo.commitment-platform.com](https://demo.commitment-platform.com)
-- **Sandbox**: [https://sandbox.commitment-platform.com](https://sandbox.commitment-platform.com)
-
-### Demo Script (15 minutes)
-1. **Upload PPA Document** → Automatic commitment extraction
-2. **View Credit Recommendations** → AI-powered service coupling
-3. **Generate Calendar Events** → Automated attestation tracking
-4. **Learning System** → Accept/reject recommendations
+### MCP Server Requirements
+- **5 MCP Servers** (1 existing, 1 enhancement, 3 new)
+- **Ports 3010-3014** available
+- **Additional dependencies** per MCP server (see MCP guide)
 
 ## 📖 Documentation
 
+- **[README](README.md)** - Main project overview
+- **[MCP Server Requirements](MCP_SERVER_REQUIREMENTS.md)** - **⭐ CRITICAL: MCP server setup guide**
 - **[Customer Implementation Guide](CUSTOMER_IMPLEMENTATION_GUIDE.md)** - Step-by-step setup for customers
 - **[Internal Implementation Guide](INTERNAL_IMPLEMENTATION_GUIDE.md)** - For Amazon teams and SAs
 - **[Demo Script](DEMO_SCRIPT.md)** - Complete demo presentation guide
 - **[Deployment Guide](DEPLOYMENT_GUIDE.md)** - Production deployment instructions
 
-## 🔧 Configuration
+## 🚀 Complete Setup Process
 
-### Environment Variables
+### Step 1: Core Platform
 ```bash
-export FLASK_ENV=production
-export AWS_REGION=us-east-1
-export DATABASE_URL=postgresql://user:pass@host:port/db
-export SECRET_KEY=your-secret-key
+git clone <repository-url>
+cd commitment-intelligent-platform-v0.3
+pip install -r requirements.txt
 ```
 
-### AWS Permissions Required
-```json
-{
-    "Version": "2012-10-17",
-    "Statement": [
-        {
-            "Effect": "Allow",
-            "Action": [
-                "ce:GetCostAndUsage",
-                "ce:GetDimensionValues",
-                "ce:GetUsageReport"
-            ],
-            "Resource": "*"
-        }
-    ]
-}
+### Step 2: MCP Servers (CRITICAL)
+```bash
+# Start existing MCP server
+python3 aws_billing_server.py --port 3010 &
+
+# Enhance Outlook Calendar MCP (see MCP guide)
+python3 enhanced_outlook_calendar_server.py --port 3011 &
+
+# Create new MCP servers (see MCP guide)
+python3 document_processing_server.py --port 3012 &
+python3 learning_analytics_server.py --port 3013 &
+python3 notification_server.py --port 3014 &
+```
+
+### Step 3: Start Platform
+```bash
+python3 complete_intelligent_dashboard.py
 ```
 
 ## 📊 Success Metrics
@@ -135,64 +154,11 @@ export SECRET_KEY=your-secret-key
 - **< 2 second response time** for all API endpoints
 - **80% credit qualification rate** for eligible customers
 
-## 🛠️ Development
-
-### Local Development Setup
-```bash
-# Clone repository
-git clone <repository-url>
-cd commitment-intelligent-platform-v0.3
-
-# Create virtual environment
-python3 -m venv venv
-source venv/bin/activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Run tests
-python -m pytest tests/
-
-# Start development server
-python3 complete_intelligent_dashboard.py
-```
-
-### Testing
-```bash
-# Unit tests
-python -m pytest tests/unit/
-
-# Integration tests
-python -m pytest tests/integration/
-
-# End-to-end tests
-python -m pytest tests/e2e/
-```
-
-## 🚢 Deployment
-
-### Docker
-```bash
-docker build -t commitment-platform .
-docker run -p 5000:5000 commitment-platform
-```
-
-### AWS ECS/Fargate
-```bash
-# Build and push to ECR
-aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin <account>.dkr.ecr.us-east-1.amazonaws.com
-docker build -t commitment-platform .
-docker tag commitment-platform:latest <account>.dkr.ecr.us-east-1.amazonaws.com/commitment-platform:latest
-docker push <account>.dkr.ecr.us-east-1.amazonaws.com/commitment-platform:latest
-
-# Deploy to ECS
-aws ecs update-service --cluster commitment-platform --service commitment-platform --force-new-deployment
-```
-
 ## 🔒 Security
 
 - **SSL/TLS encryption** for all communications
 - **AWS IAM roles** for secure API access
+- **MCP server authentication** with API keys
 - **Input validation** and sanitization
 - **Rate limiting** on all endpoints
 - **Audit logging** for compliance
@@ -209,30 +175,10 @@ aws ecs update-service --cluster commitment-platform --service commitment-platfo
 - **Slack**: #commitment-platform-support
 - **Emergency**: +1-800-PLATFORM
 
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- **AWS Cost Explorer API** for real-time spend data
-- **Flask** for the web framework
-- **Chart.js** for data visualization
-- **pdfplumber** for document processing
-- **boto3** for AWS integration
-
 ## 📈 Roadmap
 
 ### v0.4 (Q1 2025)
-- [ ] Multi-cloud support (Azure, GCP)
+- [ ] Complete MCP server ecosystem
 - [ ] Advanced ML recommendations
 - [ ] Mobile app for notifications
 - [ ] API for third-party integrations
@@ -244,5 +190,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [ ] Enterprise SSO integration
 
 ---
+
+**⚠️ IMPORTANT: Review [MCP_SERVER_REQUIREMENTS.md](MCP_SERVER_REQUIREMENTS.md) before deployment**
 
 **Built with ❤️ for AWS customers to maximize their PPA value**
