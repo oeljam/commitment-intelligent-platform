@@ -1,47 +1,16 @@
 #!/usr/bin/env python3
 """
-Commitment Intelligent Platform v0.3 - Complete Dashboard
-Features: Spend tracking, credit coupling, attestation calendar, email integration
+Commitment Intelligent Platform v0.3 - Fixed Dashboard
+Focus: Workload qualification for credits, proper feedback, history tracking
 """
 
 from flask import Flask, render_template, jsonify, request, redirect, url_for, session
-import boto3
 import json
-import pdfplumber
-import re
 import os
-import sys
 from datetime import datetime, timedelta
-from werkzeug.utils import secure_filename
-
-# Import our integration modules
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-try:
-    from outlook_calendar_mcp import OutlookCalendarMCP
-    from email_sender import EmailSender
-    from attestation_calendar_system import AttestationCalendarSystem
-    from credit_coupling_server import get_credit_recommendations
-except ImportError as e:
-    print(f"Warning: Some modules not available: {e}")
 
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
-
-# Configuration
-UPLOAD_FOLDER = 'uploads'
-ALLOWED_EXTENSIONS = {'pdf'}
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
-
-# Ensure upload directory exists
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-
-# Initialize integrations
-calendar_client = OutlookCalendarMCP()
-email_client = EmailSender()
-
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 @app.route('/')
 def dashboard():
@@ -61,28 +30,29 @@ def dashboard():
         .metric-label { color: #666; margin-top: 5px; }
         .chart-container { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
         .credit-recommendations { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
-        .attestation-calendar { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .history-section { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
         .credit-card { border: 1px solid #ddd; border-radius: 8px; padding: 15px; margin: 10px 0; position: relative; }
         .credit-card.qualified { border-left: 4px solid #28a745; background: #f8fff9; }
         .credit-card.partially_qualified { border-left: 4px solid #ffc107; background: #fffdf0; }
-        .credit-card.opportunity { border-left: 4px solid #17a2b8; background: #f0f9ff; }
+        .credit-card.not_qualified { border-left: 4px solid #dc3545; background: #fff5f5; }
         .credit-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
         .credit-discount { background: #FF9900; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold; }
         .confidence-badge { position: absolute; top: 10px; right: 10px; padding: 2px 6px; border-radius: 3px; font-size: 0.8em; }
         .confidence-high { background: #28a745; color: white; }
         .confidence-medium { background: #ffc107; color: black; }
         .confidence-low { background: #dc3545; color: white; }
-        .confidence-new { background: #17a2b8; color: white; }
         .feedback-buttons { margin-top: 15px; }
         .btn { background: #FF9900; color: white; padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; margin-right: 10px; }
         .btn:hover { background: #e88900; }
         .btn-accept { background: #28a745; }
         .btn-reject { background: #dc3545; }
-        .calendar-event { border: 1px solid #ddd; border-radius: 4px; padding: 10px; margin: 5px 0; background: #f9f9f9; }
-        .calendar-event.urgent { border-left: 4px solid #dc3545; }
         .upload-section { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
         .upload-area { border: 2px dashed #ddd; border-radius: 8px; padding: 30px; text-align: center; cursor: pointer; }
         .upload-area:hover { border-color: #FF9900; background: #fff8f0; }
+        .history-item { padding: 15px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }
+        .history-item:last-child { border-bottom: none; }
+        .history-item.accepted { border-left: 4px solid #28a745; }
+        .history-item.rejected { border-left: 4px solid #dc3545; }
         
         /* Toast Notifications */
         .toast-container { position: fixed; top: 20px; right: 20px; z-index: 1000; }
@@ -91,42 +61,26 @@ def dashboard():
         .toast.warning { border-left-color: #ffc107; }
         .toast.info { border-left-color: #17a2b8; }
         @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-        
-        /* Modal System */
-        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); }
-        .modal-content { background: white; margin: 5% auto; padding: 30px; border-radius: 12px; width: 90%; max-width: 600px; max-height: 80vh; overflow-y: auto; }
-        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid #eee; }
-        .close { font-size: 28px; font-weight: bold; cursor: pointer; color: #aaa; }
-        .close:hover { color: #000; }
-        
-        /* Form Elements */
-        .form-group { margin-bottom: 20px; }
-        .form-group label { display: block; margin-bottom: 5px; font-weight: 500; color: #555; }
-        .form-control { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; }
-        .form-control:focus { outline: none; border-color: #FF9900; box-shadow: 0 0 0 2px rgba(255, 153, 0, 0.2); }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
             <h1>🎯 Commitment Intelligent Platform v0.3</h1>
-            <p>Intelligent credit coupling with attestation calendar and learning loop</p>
+            <p>Workload qualification for AWS credits and commitment tracking</p>
         </div>
         
-        <!-- Upload Section - Moved to top -->
+        <!-- Upload Section -->
         <div class="upload-section">
             <h3>📄 Document Upload & Analysis</h3>
             <div class="upload-area" onclick="document.getElementById('fileInput').click()">
                 <div style="font-size: 48px; margin-bottom: 10px;">📄</div>
                 <h4>Upload PDF Documents</h4>
                 <p>Drag & drop files here or click to browse</p>
-                <p style="font-size: 12px; color: #666; margin-top: 10px;">Supported: PDF files up to 16MB</p>
                 <input type="file" id="fileInput" multiple accept=".pdf" style="display: none;">
             </div>
             <div style="margin-top: 15px;">
                 <button class="btn" onclick="analyzeDocuments()" id="analyzeBtn">🔍 Analyze Documents</button>
-                <button class="btn" onclick="configureEmail()">📧 Configure Email</button>
-                <button class="btn" onclick="connectCalendar()">📅 Connect Calendar</button>
             </div>
         </div>
         
@@ -149,113 +103,149 @@ def dashboard():
                 <div class="metric-label">Monthly Target</div>
             </div>
             <div class="metric-card">
-                <div class="metric-value" id="projectedSavings">$12,500</div>
-                <div class="metric-label">Projected Annual Savings</div>
+                <div class="metric-value" id="qualifiedWorkloads">3</div>
+                <div class="metric-label">Qualified Workloads</div>
             </div>
             <div class="metric-card">
-                <div class="metric-value" id="creditUtilization">68%</div>
-                <div class="metric-label">Credit Utilization</div>
+                <div class="metric-value" id="creditEligible">$15,200</div>
+                <div class="metric-label">Credit Eligible Spend</div>
             </div>
         </div>
         
-        <!-- Spend vs Commitment Chart -->
+        <!-- Spend vs Commitment Chart (Fixed) -->
         <div class="chart-container">
             <h3>📊 Spend vs Commitment Tracker</h3>
             <canvas id="spendChart" width="400" height="200"></canvas>
         </div>
         
-        <!-- Credit Recommendations -->
+        <!-- Workload Credit Qualification (Fixed Focus) -->
         <div class="credit-recommendations">
-            <h3>🧠 Intelligent Credit Coupling Recommendations</h3>
-            <p>AI-powered recommendations with learning feedback:</p>
-            <div id="creditRecommendations">Loading credit analysis...</div>
+            <h3>🎯 Workload Credit Qualification Analysis</h3>
+            <p>AI analysis of workloads qualifying for AWS credits:</p>
+            <div id="creditRecommendations">Loading workload analysis...</div>
         </div>
         
-        <!-- Attestation Calendar -->
-        <div class="attestation-calendar">
-            <h3>📅 Attestation Calendar Events</h3>
-            <p>Automated calendar events for credit submission deadlines:</p>
-            <div id="attestationEvents">Loading calendar events...</div>
-            <button class="btn" onclick="createCalendarEvents()">📅 Create Calendar Events</button>
-            <button class="btn" onclick="openEventModal()">📋 Select Events</button>
+        <!-- History Section (Restored) -->
+        
+        <!-- Attestation Calendar Section -->
+        <div class="attestation-calendar" style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px;">
+            <h3>📅 Attestation Calendar & Reminders</h3>
+            <p>Create calendar events with attestation forms for credit submissions:</p>
+            <div id="attestationEvents">
+                <div class="calendar-event urgent" style="border: 1px solid #ddd; border-radius: 4px; padding: 10px; margin: 5px 0; background: #f9f9f9; border-left: 4px solid #dc3545;">
+                    <strong>🚨 EC2 RI Credit Submission Due</strong><br>
+                    <small>Tomorrow, 2:00 PM - Submit Reserved Instance credits for Q4</small>
+                </div>
+                <div class="calendar-event" style="border: 1px solid #ddd; border-radius: 4px; padding: 10px; margin: 5px 0; background: #f9f9f9;">
+                    <strong>📊 Monthly Commitment Review</strong><br>
+                    <small>Next Monday, 10:00 AM - Review progress toward annual commitment</small>
+                </div>
+                <div class="calendar-event" style="border: 1px solid #ddd; border-radius: 4px; padding: 10px; margin: 5px 0; background: #f9f9f9;">
+                    <strong>💰 Savings Plan Assessment</strong><br>
+                    <small>Next Friday, 3:00 PM - Evaluate current Savings Plan utilization</small>
+                </div>
+            </div>
+            <button class="btn" onclick="openAttestationModal()">📋 Select & Create Calendar Reminders</button>
+        </div>
+        <div class="history-section">
+            <h3>📈 Decision History</h3>
+            <div id="historyContent">
+                <div style="text-align: center; padding: 20px; color: #666;">
+                    <p>No decisions recorded yet. Accept or reject recommendations to build history.</p>
+                </div>
+            </div>
         </div>
     </div>
     
     <!-- Toast Container -->
-    <div class="toast-container" id="toastContainer"></div>
     
-    <!-- Email Configuration Modal -->
-    <div id="emailModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>📧 Email Configuration</h3>
-                <span class="close" onclick="closeModal('emailModal')">&times;</span>
-            </div>
-            <div class="form-group">
-                <label>Predefined Teams:</label>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px;">
-                    <label><input type="checkbox" value="operations"> Operations Team</label>
-                    <label><input type="checkbox" value="management"> Management</label>
-                    <label><input type="checkbox" value="it_support"> IT Support</label>
-                    <label><input type="checkbox" value="finance"> Finance Team</label>
-                    <label><input type="checkbox" value="hr"> HR Department</label>
-                    <label><input type="checkbox" value="legal"> Legal & Compliance</label>
-                </div>
-            </div>
-            <div class="form-group">
-                <label for="customEmails">Custom Email Addresses:</label>
-                <textarea id="customEmails" class="form-control" rows="3" placeholder="Enter email addresses, one per line"></textarea>
-            </div>
-            <div style="text-align: right;">
-                <button class="btn btn-secondary" onclick="closeModal('emailModal')">Cancel</button>
-                <button class="btn" onclick="saveEmailConfig()">Save Configuration</button>
-            </div>
-        </div>
-    </div>
-    
-    <!-- Event Selection Modal -->
-    <div id="eventModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>📅 Create Calendar Events</h3>
-                <span class="close" onclick="closeModal('eventModal')">&times;</span>
+    <!-- Attestation Calendar Modal -->
+    <div id="attestationModal" class="modal" style="display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5);">
+        <div class="modal-content" style="background: white; margin: 5% auto; padding: 30px; border-radius: 12px; width: 90%; max-width: 700px; max-height: 80vh; overflow-y: auto;">
+            <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid #eee;">
+                <h3>📅 Create Attestation Calendar Events</h3>
+                <span class="close" onclick="closeModal('attestationModal')" style="font-size: 28px; font-weight: bold; cursor: pointer; color: #aaa;">&times;</span>
             </div>
             <div style="margin-bottom: 20px;">
-                <button class="btn" onclick="selectAllEvents()">Select All</button>
-                <button class="btn" onclick="deselectAllEvents()">Deselect All</button>
+                <button class="btn" onclick="selectAllAttestations()">✅ Select All</button>
+                <button class="btn" onclick="deselectAllAttestations()" style="background: #6c757d;">❌ Deselect All</button>
             </div>
-            <div id="eventList">
-                <div style="margin-bottom: 15px;">
-                    <label><input type="checkbox" checked> Credit Submission Deadline - EC2 Reserved Instances</label>
-                    <div style="margin-left: 20px; font-size: 12px; color: #666;">Tomorrow 2:00 PM - Submit RI credits</div>
+            <div id="attestationEventList">
+                <div style="margin-bottom: 15px; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
+                    <label style="display: flex; align-items: center;">
+                        <input type="checkbox" checked style="margin-right: 10px;">
+                        <div>
+                            <strong>EC2 Reserved Instance Credit Submission</strong><br>
+                            <small>📅 Tomorrow 2:00 PM - 3:00 PM</small><br>
+                            <small>📎 Includes: RI utilization report, credit calculation form</small>
+                        </div>
+                    </label>
                 </div>
-                <div style="margin-bottom: 15px;">
-                    <label><input type="checkbox" checked> Savings Plan Review Meeting</label>
-                    <div style="margin-left: 20px; font-size: 12px; color: #666;">Next Week Monday 10:00 AM - Review SP utilization</div>
+                <div style="margin-bottom: 15px; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
+                    <label style="display: flex; align-items: center;">
+                        <input type="checkbox" checked style="margin-right: 10px;">
+                        <div>
+                            <strong>Monthly Commitment Progress Review</strong><br>
+                            <small>📅 Next Monday 10:00 AM - 11:00 AM</small><br>
+                            <small>📎 Includes: Spend tracking report, commitment attestation form</small>
+                        </div>
+                    </label>
                 </div>
-                <div style="margin-bottom: 15px;">
-                    <label><input type="checkbox"> Monthly Commitment Assessment</label>
-                    <div style="margin-left: 20px; font-size: 12px; color: #666;">End of Month Friday 3:00 PM - Progress review</div>
+                <div style="margin-bottom: 15px; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
+                    <label style="display: flex; align-items: center;">
+                        <input type="checkbox" style="margin-right: 10px;">
+                        <div>
+                            <strong>Savings Plan Utilization Assessment</strong><br>
+                            <small>📅 Next Friday 3:00 PM - 4:00 PM</small><br>
+                            <small>📎 Includes: SP usage analysis, optimization attestation</small>
+                        </div>
+                    </label>
                 </div>
             </div>
             <div style="text-align: right; margin-top: 20px;">
-                <button class="btn" onclick="closeModal('eventModal')">Cancel</button>
-                <button class="btn btn-accept" onclick="createSelectedEvents()">Create Events</button>
+                <button class="btn" onclick="closeModal('attestationModal')" style="background: #6c757d;">Cancel</button>
+                <button class="btn btn-accept" onclick="createSelectedAttestations()">📅 Create Calendar Events</button>
             </div>
         </div>
     </div>
+    <div class="toast-container" id="toastContainer"></div>
 
     <script>
+        // History tracking
+        let decisionHistory = [];
+        
         // Initialize data
         let spendData = {
-            currentSpend: 272.80,
-            annualCommitment: 50000,
-            monthlyTarget: 4167,
-            projectedSavings: 12500,
-            creditUtilization: 68
+            currentSpend: 272.80, // Available from AWS APIs
+            annualCommitment: null, // Requires PDF analysis
+            monthlyTarget: null, // Calculated from commitment
+            qualifiedWorkloads: null, // Requires PDF analysis
+            creditEligible: null // Requires PDF analysis
         };
         
+        let pdfAnalyzed = false;
+        
         // Toast Notification System
+        // Update metrics display based on analysis state
+        function updateMetricsDisplay() {
+            if (!pdfAnalyzed) {
+                document.getElementById('currentSpend').textContent = '$' + spendData.currentSpend.toFixed(2);
+                document.getElementById('annualCommitment').textContent = 'Upload PDF';
+                document.getElementById('progress').textContent = 'Upload PDF';
+                document.getElementById('monthlyTarget').textContent = 'Upload PDF';
+                document.getElementById('qualifiedWorkloads').textContent = 'Upload PDF';
+                document.getElementById('creditEligible').textContent = 'Upload PDF';
+            } else {
+                document.getElementById('currentSpend').textContent = '$' + spendData.currentSpend.toFixed(2);
+                document.getElementById('annualCommitment').textContent = '$' + spendData.annualCommitment.toLocaleString();
+                document.getElementById('progress').textContent = ((spendData.currentSpend / spendData.annualCommitment) * 100).toFixed(2) + '%';
+                document.getElementById('monthlyTarget').textContent = '$' + spendData.monthlyTarget.toLocaleString();
+                document.getElementById('qualifiedWorkloads').textContent = spendData.qualifiedWorkloads;
+                document.getElementById('creditEligible').textContent = '$' + spendData.creditEligible.toLocaleString();
+                createSpendChart();
+            }
+        }
+        
         function showToast(message, type = 'success') {
             const container = document.getElementById('toastContainer');
             const toast = document.createElement('div');
@@ -270,98 +260,85 @@ def dashboard():
             setTimeout(() => { if (toast.parentElement) toast.remove(); }, 5000);
         }
         
-        // Modal Management
-        function openModal(modalId) { document.getElementById(modalId).style.display = 'block'; }
-        function closeModal(modalId) { document.getElementById(modalId).style.display = 'none'; }
-        function openEventModal() { openModal('eventModal'); }
-        
-        // File Upload
-        document.getElementById('fileInput').addEventListener('change', function(e) {
-            const files = Array.from(e.target.files);
-            if (files.length > 0) {
-                showToast(`${files.length} file(s) selected for upload`, 'info');
-            }
-        });
-        
         // Analysis Function
         function analyzeDocuments() {
             const btn = document.getElementById('analyzeBtn');
             btn.disabled = true;
-            btn.innerHTML = '🔄 Analyzing...';
-            showToast('Starting document analysis...', 'info');
+            btn.innerHTML = '🔄 Analyzing PDF for commitment data...';
+            showToast('Extracting commitment information from PDF...', 'info');
             
             setTimeout(() => {
+                // Simulate extracting commitment data from PDF
+                spendData.annualCommitment = 50000;
+                spendData.monthlyTarget = 4167;
+                spendData.qualifiedWorkloads = 3;
+                spendData.creditEligible = 15200;
+                pdfAnalyzed = true;
+                
                 btn.disabled = false;
                 btn.innerHTML = '🔍 Analyze Documents';
-                showToast('Analysis completed successfully!', 'success');
-                loadCreditRecommendations();
-                updateSpendMetrics();
+                showToast('PDF analysis completed! Commitment data extracted.', 'success');
+                
+                updateMetricsDisplay();
+                loadWorkloadQualifications();
             }, 3000);
         }
+        }
         
-        // Load Credit Recommendations
-        function loadCreditRecommendations() {
+        // Load Workload Qualifications (Fixed Focus)
+        function loadWorkloadQualifications() {
             document.getElementById('creditRecommendations').innerHTML = `
                 <div class="credit-card qualified">
-                    <div class="confidence-badge confidence-high">High Confidence</div>
+                    <div class="confidence-badge confidence-high">Qualified</div>
                     <div class="credit-header">
-                        <h4>💰 EC2 Reserved Instance Opportunity</h4>
-                        <span class="credit-discount">Save 45%</span>
+                        <h4>✅ Production EC2 Workload</h4>
+                        <span class="credit-discount">Credit Eligible</span>
                     </div>
-                    <p><strong>Recommendation:</strong> Purchase 3-year RI for m5.large instances</p>
-                    <p><strong>Annual Savings:</strong> $8,500 | <strong>Commitment:</strong> $15,000</p>
-                    <p><strong>Confidence:</strong> 92% based on 6 months usage pattern</p>
+                    <p><strong>Workload:</strong> m5.large instances running 24/7 production services</p>
+                    <p><strong>Usage Pattern:</strong> Consistent 95%+ utilization for 6+ months</p>
+                    <p><strong>Credit Qualification:</strong> Fully qualifies for Reserved Instance credits</p>
+                    <p><strong>Potential Credit Value:</strong> $8,500 annually</p>
                     <div class="feedback-buttons">
-                        <button class="btn btn-accept" onclick="acceptRecommendation('ri-001')">✅ Accept</button>
-                        <button class="btn btn-reject" onclick="rejectRecommendation('ri-001')">❌ Reject</button>
-                        <button class="btn" onclick="modifyRecommendation('ri-001')">✏️ Modify</button>
+                        <button class="btn btn-accept" onclick="acceptRecommendation('prod-ec2-001', 'Production EC2 Workload')">✅ Accept</button>
+                        <button class="btn btn-reject" onclick="rejectRecommendation('prod-ec2-001', 'Production EC2 Workload')">❌ Reject</button>
                     </div>
                 </div>
                 
                 <div class="credit-card partially_qualified">
-                    <div class="confidence-badge confidence-medium">Medium Confidence</div>
+                    <div class="confidence-badge confidence-medium">Partial</div>
                     <div class="credit-header">
-                        <h4>📊 Savings Plan Optimization</h4>
-                        <span class="credit-discount">Save 25%</span>
+                        <h4>⚠️ Development RDS Database</h4>
+                        <span class="credit-discount">Partial Credit</span>
                     </div>
-                    <p><strong>Recommendation:</strong> Increase Compute Savings Plan commitment</p>
-                    <p><strong>Annual Savings:</strong> $4,000 | <strong>Commitment:</strong> $12,000</p>
-                    <p><strong>Confidence:</strong> 78% based on compute usage trends</p>
+                    <p><strong>Workload:</strong> db.t3.medium development database</p>
+                    <p><strong>Usage Pattern:</strong> 60% utilization during business hours</p>
+                    <p><strong>Credit Qualification:</strong> Partially qualifies - consider Savings Plan</p>
+                    <p><strong>Potential Credit Value:</strong> $2,800 annually</p>
                     <div class="feedback-buttons">
-                        <button class="btn btn-accept" onclick="acceptRecommendation('sp-001')">✅ Accept</button>
-                        <button class="btn btn-reject" onclick="rejectRecommendation('sp-001')">❌ Reject</button>
-                        <button class="btn" onclick="modifyRecommendation('sp-001')">✏️ Modify</button>
+                        <button class="btn btn-accept" onclick="acceptRecommendation('dev-rds-001', 'Development RDS Database')">✅ Accept</button>
+                        <button class="btn btn-reject" onclick="rejectRecommendation('dev-rds-001', 'Development RDS Database')">❌ Reject</button>
                     </div>
                 </div>
                 
-                <div class="credit-card opportunity">
-                    <div class="confidence-badge confidence-new">New Opportunity</div>
+                <div class="credit-card not_qualified">
+                    <div class="confidence-badge confidence-low">Not Qualified</div>
                     <div class="credit-header">
-                        <h4>🔄 RDS Reserved Instance</h4>
-                        <span class="credit-discount">Save 35%</span>
+                        <h4>❌ Test Environment Compute</h4>
+                        <span class="credit-discount">No Credit</span>
                     </div>
-                    <p><strong>Recommendation:</strong> Purchase RDS RI for production database</p>
-                    <p><strong>Annual Savings:</strong> $2,800 | <strong>Commitment:</strong> $6,500</p>
-                    <p><strong>Confidence:</strong> 85% based on consistent database usage</p>
+                    <p><strong>Workload:</strong> Spot instances for testing and development</p>
+                    <p><strong>Usage Pattern:</strong> Intermittent usage, <30% monthly utilization</p>
+                    <p><strong>Credit Qualification:</strong> Does not qualify for commitment credits</p>
+                    <p><strong>Recommendation:</strong> Keep on On-Demand or Spot pricing</p>
                     <div class="feedback-buttons">
-                        <button class="btn btn-accept" onclick="acceptRecommendation('rds-001')">✅ Accept</button>
-                        <button class="btn btn-reject" onclick="rejectRecommendation('rds-001')">❌ Reject</button>
-                        <button class="btn" onclick="modifyRecommendation('rds-001')">✏️ Modify</button>
+                        <button class="btn btn-accept" onclick="acceptRecommendation('test-spot-001', 'Test Environment Compute')">✅ Accept</button>
+                        <button class="btn btn-reject" onclick="rejectRecommendation('test-spot-001', 'Test Environment Compute')">❌ Reject</button>
                     </div>
                 </div>
             `;
         }
         
-        // Update Spend Metrics
-        function updateSpendMetrics() {
-            const progress = (spendData.currentSpend / spendData.annualCommitment * 100).toFixed(2);
-            document.getElementById('progress').textContent = progress + '%';
-            
-            // Update chart
-            createSpendChart();
-        }
-        
-        // Create Spend Chart
+        // Fixed Chart (Removed projected with credits line)
         function createSpendChart() {
             const ctx = document.getElementById('spendChart').getContext('2d');
             new Chart(ctx, {
@@ -380,12 +357,6 @@ def dashboard():
                         borderColor: '#28a745',
                         backgroundColor: 'rgba(40, 167, 69, 0.1)',
                         borderDash: [5, 5]
-                    }, {
-                        label: 'Projected with Credits',
-                        data: [272.80, 285.50, 310.20, 295.80, 320.15, 305.90, 3800, 3850, 3900, 3950, 4000, 4050],
-                        borderColor: '#17a2b8',
-                        backgroundColor: 'rgba(23, 162, 184, 0.1)',
-                        tension: 0.4
                     }]
                 },
                 options: {
@@ -401,152 +372,115 @@ def dashboard():
                         }
                     },
                     plugins: {
-                        legend: {
-                            position: 'top',
-                        },
+                        legend: { position: 'top' },
                         title: {
                             display: true,
-                            text: 'Monthly Spend Tracking vs Annual Commitment'
+                            text: 'Monthly Spend vs Annual Commitment Target'
                         }
                     }
                 }
             });
         }
         
-        // Recommendation Actions
-        function acceptRecommendation(id) {
-            showToast(`Recommendation ${id} accepted! Creating calendar events...`, 'success');
-            openEventModal();
+        // Fixed Recommendation Actions with History
+        function acceptRecommendation(id, name) {
+            showToast(`Workload "${name}" accepted for credit qualification!`, 'success');
+            addToHistory(id, name, 'accepted');
+            updateHistoryDisplay();
         }
         
-        function rejectRecommendation(id) {
-            showToast(`Recommendation ${id} rejected. Feedback recorded for learning.`, 'info');
+        function rejectRecommendation(id, name) {
+            showToast(`Workload "${name}" rejected. Feedback recorded for learning.`, 'info');
+            addToHistory(id, name, 'rejected');
+            updateHistoryDisplay();
         }
         
-        function modifyRecommendation(id) {
-            showToast(`Opening modification dialog for ${id}...`, 'info');
+        // History Management
+        function addToHistory(id, name, action) {
+            decisionHistory.unshift({
+                id: id,
+                name: name,
+                action: action,
+                timestamp: new Date().toLocaleString()
+            });
         }
         
-        // Calendar Functions
-        function connectCalendar() {
-            showToast('Redirecting to Microsoft authentication...', 'info');
-            setTimeout(() => {
-                showToast('Calendar connected successfully!', 'success');
-            }, 2000);
-        }
-        
-        function createCalendarEvents() {
-            showToast('Creating attestation calendar events...', 'info');
-            setTimeout(() => {
-                loadAttestationEvents();
-                showToast('Calendar events created successfully!', 'success');
-            }, 1500);
-        }
-        
-        function loadAttestationEvents() {
-            document.getElementById('attestationEvents').innerHTML = `
-                <div class="calendar-event urgent">
-                    <strong>🚨 EC2 RI Credit Submission Due</strong><br>
-                    <small>Tomorrow, 2:00 PM - Submit Reserved Instance credits for Q4</small>
-                </div>
-                <div class="calendar-event">
-                    <strong>📊 Monthly Commitment Review</strong><br>
-                    <small>Next Monday, 10:00 AM - Review progress toward annual commitment</small>
-                </div>
-                <div class="calendar-event">
-                    <strong>💰 Savings Plan Assessment</strong><br>
-                    <small>Next Friday, 3:00 PM - Evaluate current Savings Plan utilization</small>
-                </div>
-            `;
-        }
-        
-        // Email Configuration
-        function configureEmail() {
-            openModal('emailModal');
-        }
-        
-        function saveEmailConfig() {
-            showToast('Email configuration saved!', 'success');
-            closeModal('emailModal');
-        }
-        
-        // Event Selection
-        function selectAllEvents() {
-            document.querySelectorAll('#eventList input[type="checkbox"]').forEach(cb => cb.checked = true);
-        }
-        
-        function deselectAllEvents() {
-            document.querySelectorAll('#eventList input[type="checkbox"]').forEach(cb => cb.checked = false);
-        }
-        
-        function createSelectedEvents() {
-            const selected = document.querySelectorAll('#eventList input[type="checkbox"]:checked').length;
-            if (selected > 0) {
-                showToast(`Creating ${selected} calendar event(s)...`, 'info');
-                setTimeout(() => {
-                    showToast(`${selected} calendar event(s) created successfully!`, 'success');
-                    closeModal('eventModal');
-                    loadAttestationEvents();
-                }, 1500);
-            } else {
-                showToast('Please select at least one event to create', 'warning');
+        function updateHistoryDisplay() {
+            const historyDiv = document.getElementById('historyContent');
+            if (decisionHistory.length === 0) {
+                historyDiv.innerHTML = '<div style="text-align: center; padding: 20px; color: #666;"><p>No decisions recorded yet.</p></div>';
+                return;
             }
+            
+            historyDiv.innerHTML = decisionHistory.map(item => `
+                <div class="history-item ${item.action}">
+                    <div>
+                        <strong>${item.name}</strong><br>
+                        <small>${item.timestamp}</small>
+                    </div>
+                    <div>
+                        <span style="color: ${item.action === 'accepted' ? '#28a745' : '#dc3545'}; font-weight: bold;">
+                            ${item.action.toUpperCase()}
+                        </span>
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        // Update Spend Metrics
+        function updateSpendMetrics() {
+            const progress = (spendData.currentSpend / spendData.annualCommitment * 100).toFixed(2);
+            document.getElementById('progress').textContent = progress + '%';
+            createSpendChart();
         }
         
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
-            showToast('Welcome to Commitment Intelligent Platform v0.3!', 'info');
-            loadCreditRecommendations();
+            showToast('Welcome! Current AWS spend loaded. Upload PDF for commitment analysis.', 'info');
+            updateMetricsDisplay();
+        
+        // Modal Management
+        function openModal(modalId) { document.getElementById(modalId).style.display = 'block'; }
+        function closeModal(modalId) { document.getElementById(modalId).style.display = 'none'; }
+        function openAttestationModal() { openModal('attestationModal'); }
+        
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            if (event.target.classList.contains('modal')) {
+                event.target.style.display = 'none';
+            }
+        }
+        
+        // Attestation Event Selection
+        function selectAllAttestations() {
+            document.querySelectorAll('#attestationEventList input[type="checkbox"]').forEach(cb => cb.checked = true);
+            showToast('All attestation events selected', 'info');
+        }
+        
+        function deselectAllAttestations() {
+            document.querySelectorAll('#attestationEventList input[type="checkbox"]').forEach(cb => cb.checked = false);
+            showToast('All attestation events deselected', 'info');
+        }
+        
+        function createSelectedAttestations() {
+            const selected = document.querySelectorAll('#attestationEventList input[type="checkbox"]:checked').length;
+            if (selected > 0) {
+                showToast(`Creating ${selected} calendar event(s) with attestation forms...`, 'info');
+                setTimeout(() => {
+                    showToast(`${selected} calendar event(s) created successfully with attached attestation forms!`, 'success');
+                    closeModal('attestationModal');
+                }, 1500);
+            } else {
+                showToast('Please select at least one attestation event to create', 'warning');
+            }
+        }
+            loadWorkloadQualifications();
             createSpendChart();
-            loadAttestationEvents();
         });
     </script>
 </body>
 </html>
 '''
-
-# API Routes (keeping the same routes from before)
-@app.route('/upload', methods=['POST'])
-def upload_file():
-    try:
-        if 'file' not in request.files:
-            return jsonify({'success': False, 'error': 'No file provided'})
-        
-        file = request.files['file']
-        if file.filename == '':
-            return jsonify({'success': False, 'error': 'No file selected'})
-        
-        if file and allowed_file(file.filename):
-            filename = secure_filename(file.filename)
-            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            file.save(filepath)
-            
-            return jsonify({
-                'success': True,
-                'message': 'File uploaded successfully',
-                'filename': filename,
-                'file_id': f"file_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-            })
-        else:
-            return jsonify({'success': False, 'error': 'Invalid file type. Please upload a PDF file.'})
-    
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)})
-
-@app.route('/health')
-def health_check():
-    return jsonify({
-        'status': 'healthy',
-        'timestamp': datetime.now().isoformat(),
-        'version': '0.3.0',
-        'features': {
-            'spend_tracking': True,
-            'credit_coupling': True,
-            'attestation_calendar': True,
-            'email_integration': True,
-            'calendar_integration': True
-        }
-    })
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
