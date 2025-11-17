@@ -1,252 +1,248 @@
-# 🎯 Commitment Intelligent Platform v0.3
+# Commitment Intelligent Platform v0.3
 
-> AI-powered AWS PPA optimization with intelligent credit coupling and automated attestation management
+An AI-powered platform for analyzing PDF documents and generating intelligent recommendations with integrated calendar and email management.
 
-[![Version](https://img.shields.io/badge/version-0.3.0-blue.svg)](https://github.com/company/commitment-intelligent-platform)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://python.org)
-[![AWS](https://img.shields.io/badge/AWS-Cost%20Explorer-orange.svg)](https://aws.amazon.com/aws-cost-management/aws-cost-explorer/)
+## 🆕 What's New in v0.3
+
+### Enhanced Dashboard & UX
+- **Compact Layout**: Streamlined interface with better space utilization
+- **Toast Notifications**: Real-time feedback for user actions
+- **Setup Process**: Guided preparation phase before analysis
+- **Visual Feedback**: Improved button states and loading indicators
+
+### Business Workflow Integration
+- **Email Configuration**: Predefined teams and custom email lists
+- **Outlook Calendar**: Real Microsoft Graph API integration with OAuth2
+- **Event Management**: Select and create calendar events from recommendations
+- **History Tracking**: Complete audit trail for recommendations and attestations
+
+### Advanced Features
+- **PDF Upload Repositioning**: Better file management workflow
+- **Email Distribution**: SMTP-based email sending with HTML templates
+- **Event Selection Modal**: Bulk operations with "Select All" functionality
+- **Spend Monitoring**: Track and monitor recommendation implementations
 
 ## 🚀 Quick Start
 
+### Prerequisites
+- Python 3.8+
+- Virtual environment (recommended)
+- Microsoft Graph API credentials (for calendar integration)
+- SMTP server access (for email features)
+
+### Installation
 ```bash
+# Clone the repository
+git clone <repository-url>
+cd commitment-intelligent-platform-v0.3
+
 # Create virtual environment
-python3 -m venv venv
+python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
 # Install dependencies
 pip install -r requirements.txt
 
-# Configure AWS credentials
-aws configure
-
-# Start platform
-python3 complete_intelligent_dashboard.py
-
-# Open browser
-open http://localhost:5000
+# Run the application
+python dashboard.py
 ```
 
-## ✨ Key Features
+### Setup Process
+1. **Upload PDFs**: Add documents for analysis
+2. **Configure Email**: Set up team distributions and custom lists
+3. **Connect Calendar**: Authenticate with Microsoft Outlook (optional)
+4. **Run Analysis**: Generate AI-powered recommendations
+5. **Take Action**: Accept recommendations and create calendar events
 
-### 🧠 Intelligent Credit Coupling
-- **AI-powered service analysis** identifies credit opportunities
-- **Real-time recommendations** for service combinations
-- **Potential savings calculation** with specific guidance
-- **Learning system** adapts to your preferences
+## 📋 Features
 
-### 📅 Automated Attestation Management
-- **Calendar integration** with deadline tracking
-- **Template extraction** from PPA documents
-- **5-stage reminder system** (30, 14, 7, 3, 1 days)
-- **Compliance automation** ensures 100% on-time submissions
+### Core Functionality
+- **PDF Analysis**: Extract and analyze document content
+- **AI Recommendations**: Generate intelligent suggestions
+- **Learning System**: Adaptive recommendations based on user feedback
+- **Multi-format Support**: Handle various document types
 
-### 📊 Real-time PPA Tracking
-- **Live AWS spend monitoring** via Cost Explorer API
-- **Commitment progress tracking** with visual dashboards
-- **PDF document processing** extracts discount rates automatically
-- **Multi-account support** for enterprise customers
+### Integration Capabilities
+- **Microsoft Outlook**: Calendar event creation and management
+- **Email Distribution**: Automated notifications to stakeholders
+- **Event History**: Track all recommendation and attestation activities
+- **User Preferences**: Personalized experience and settings
 
-### 🎯 Credit Types Supported
-
-| Credit Type | Discount | Services | Min Spend |
-|-------------|----------|----------|-----------|
-| **Gen AI Credit** | 25% | SageMaker + Lambda + EC2/S3 | $1,000/mo |
-| **Graviton Optimization** | 31% | EC2 (ARM) + RDS + ElastiCache | $500/mo |
-| **Data Analytics** | 22% | Redshift + EMR + S3 + Kinesis | $800/mo |
-| **Serverless** | 18% | Lambda + API Gateway + DynamoDB | $300/mo |
-
-## 📋 Requirements
-
-- **Python 3.8+**
-- **AWS Account** with Cost Explorer API access
-- **Valid PPA/EDP Agreement**
-- **Flask, boto3, pdfplumber** (auto-installed)
-
-## 🏗️ Architecture
-
-```
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   Dashboard     │    │  Credit Engine   │    │ Attestation     │
-│   (Flask App)   │◄──►│  (AI Analysis)   │◄──►│ Calendar System │
-└─────────────────┘    └──────────────────┘    └─────────────────┘
-         │                        │                        │
-         ▼                        ▼                        ▼
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   AWS Cost      │    │   PDF Processor  │    │  Learning Loop  │
-│   Explorer API  │    │   (Document AI)  │    │  (User Feedback)│
-└─────────────────┘    └──────────────────┘    └─────────────────┘
-```
-
-## 🎬 Demo
-
-### Live Demo Environment
-- **Production Demo**: [https://demo.commitment-platform.com](https://demo.commitment-platform.com)
-- **Sandbox**: [https://sandbox.commitment-platform.com](https://sandbox.commitment-platform.com)
-
-### Demo Script (15 minutes)
-1. **Upload PPA Document** → Automatic commitment extraction
-2. **View Credit Recommendations** → AI-powered service coupling
-3. **Generate Calendar Events** → Automated attestation tracking
-4. **Learning System** → Accept/reject recommendations
-
-## 📖 Documentation
-
-- **[Customer Implementation Guide](CUSTOMER_IMPLEMENTATION_GUIDE.md)** - Step-by-step setup for customers
-- **[Internal Implementation Guide](INTERNAL_IMPLEMENTATION_GUIDE.md)** - For Amazon teams and SAs
-- **[Demo Script](DEMO_SCRIPT.md)** - Complete demo presentation guide
-- **[Deployment Guide](DEPLOYMENT_GUIDE.md)** - Production deployment instructions
+### User Interface
+- **Responsive Design**: Works on desktop and mobile devices
+- **Real-time Updates**: Live feedback and status indicators
+- **Modal Dialogs**: Intuitive interaction patterns
+- **Progress Tracking**: Visual indicators for long-running operations
 
 ## 🔧 Configuration
 
+### Email Setup
+Configure email settings in the dashboard:
+- **Predefined Teams**: Select from common distribution lists
+- **Custom Lists**: Add specific email addresses
+- **SMTP Configuration**: Set up email server credentials
+
+### Calendar Integration
+Set up Microsoft Graph API:
+1. Register application in Azure AD
+2. Configure OAuth2 permissions
+3. Add credentials to environment variables
+4. Test connection in dashboard
+
 ### Environment Variables
 ```bash
-export FLASK_ENV=production
-export AWS_REGION=us-east-1
-export DATABASE_URL=postgresql://user:pass@host:port/db
-export SECRET_KEY=your-secret-key
+# Microsoft Graph API
+MICROSOFT_CLIENT_ID=your_client_id
+MICROSOFT_CLIENT_SECRET=your_client_secret
+MICROSOFT_TENANT_ID=your_tenant_id
+
+# Email Configuration
+SMTP_SERVER=smtp.your-server.com
+SMTP_PORT=587
+SMTP_USERNAME=your_username
+SMTP_PASSWORD=your_password
 ```
 
-### AWS Permissions Required
-```json
-{
-    "Version": "2012-10-17",
-    "Statement": [
-        {
-            "Effect": "Allow",
-            "Action": [
-                "ce:GetCostAndUsage",
-                "ce:GetDimensionValues",
-                "ce:GetUsageReport"
-            ],
-            "Resource": "*"
-        }
-    ]
-}
-```
+## 📊 Usage Workflow
 
-## 📊 Success Metrics
+### 1. Preparation Phase
+- Upload PDF documents
+- Configure email distribution lists
+- Set up calendar integration (optional)
 
-### Customer Impact
-- **25% additional savings** through credit coupling
-- **100% attestation compliance** with automated tracking
-- **90% reduction** in manual PPA management time
-- **300% ROI** in first year
+### 2. Analysis Phase
+- Run AI analysis on uploaded documents
+- Review generated recommendations
+- Customize recommendation parameters
 
-### Technical Performance
-- **85% recommendation accuracy** with learning system
-- **99.9% platform uptime** in production
-- **< 2 second response time** for all API endpoints
-- **80% credit qualification rate** for eligible customers
+### 3. Action Phase
+- Accept/reject recommendations
+- Create calendar events for implementation
+- Send email notifications to stakeholders
+- Monitor progress and outcomes
 
-## 🛠️ Development
+### 4. Tracking Phase
+- View recommendation history
+- Track attestation events
+- Monitor spend and ROI
+- Generate reports
 
-### Local Development Setup
+## 🛠️ Technical Architecture
+
+### Backend Components
+- **Flask Application**: Web server and API endpoints
+- **AI Analysis Engine**: Document processing and recommendation generation
+- **Learning System**: Adaptive algorithms for personalization
+- **Integration Layer**: External service connections
+
+### Frontend Components
+- **Dashboard Interface**: Main user interaction layer
+- **Modal System**: Dialog management for complex operations
+- **Event Management**: Calendar and email interaction components
+- **History Tracking**: Audit trail and reporting interfaces
+
+### Data Flow
+1. **Document Upload** → PDF processing and content extraction
+2. **AI Analysis** → Recommendation generation and scoring
+3. **User Interaction** → Acceptance/rejection and customization
+4. **Integration** → Calendar events and email notifications
+5. **Tracking** → History logging and progress monitoring
+
+## 🔍 API Endpoints
+
+### Core Operations
+- `POST /upload` - Upload PDF documents
+- `POST /analyze` - Run AI analysis
+- `POST /accept_recommendation` - Accept recommendation
+- `GET /recommendations` - Get recommendation history
+
+### Integration Endpoints
+- `POST /create_calendar_events` - Create Outlook calendar events
+- `POST /send_emails` - Send email notifications
+- `GET /events` - Get event history
+- `POST /configure_email` - Set up email distribution
+
+### Management Endpoints
+- `GET /attestation_history` - Get attestation events
+- `POST /update_preferences` - Update user settings
+- `GET /system_status` - Check integration status
+
+## 🧪 Testing
+
+### Unit Tests
 ```bash
-# Clone repository
-git clone <repository-url>
-cd commitment-intelligent-platform-v0.3
-
-# Create virtual environment
-python3 -m venv venv
-source venv/bin/activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Run tests
 python -m pytest tests/
-
-# Start development server
-python3 complete_intelligent_dashboard.py
 ```
 
-### Testing
+### Integration Tests
 ```bash
-# Unit tests
-python -m pytest tests/unit/
-
-# Integration tests
 python -m pytest tests/integration/
-
-# End-to-end tests
-python -m pytest tests/e2e/
 ```
 
-## 🚢 Deployment
+### Manual Testing
+1. Upload sample PDF documents
+2. Run analysis and verify recommendations
+3. Test calendar integration with test events
+4. Verify email notifications are sent correctly
 
-### Docker
+## 🚀 Deployment
+
+### Local Development
 ```bash
-docker build -t commitment-platform .
-docker run -p 5000:5000 commitment-platform
+python dashboard.py
 ```
 
-### AWS ECS/Fargate
-```bash
-# Build and push to ECR
-aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin <account>.dkr.ecr.us-east-1.amazonaws.com
-docker build -t commitment-platform .
-docker tag commitment-platform:latest <account>.dkr.ecr.us-east-1.amazonaws.com/commitment-platform:latest
-docker push <account>.dkr.ecr.us-east-1.amazonaws.com/commitment-platform:latest
+### Production Deployment
+1. Set up production environment variables
+2. Configure reverse proxy (nginx/Apache)
+3. Set up SSL certificates
+4. Configure monitoring and logging
 
-# Deploy to ECS
-aws ecs update-service --cluster commitment-platform --service commitment-platform --force-new-deployment
-```
+## 📝 Version History
 
-## 🔒 Security
+### v0.3 (Current)
+- Enhanced dashboard with compact layout
+- Integrated Outlook calendar with Microsoft Graph API
+- Added email configuration and distribution system
+- Implemented event history tracking
+- Improved user workflow with setup process
 
-- **SSL/TLS encryption** for all communications
-- **AWS IAM roles** for secure API access
-- **Input validation** and sanitization
-- **Rate limiting** on all endpoints
-- **Audit logging** for compliance
+### v0.2
+- Added learning system for adaptive recommendations
+- Implemented user preferences and customization
+- Enhanced PDF processing capabilities
+- Added basic email notifications
 
-## 📞 Support
-
-### Customer Support
-- **Email**: platform-support@company.com
-- **Documentation**: [docs.commitment-platform.com](https://docs.commitment-platform.com)
-- **Status Page**: [status.commitment-platform.com](https://status.commitment-platform.com)
-
-### Technical Support
-- **GitHub Issues**: [github.com/company/commitment-platform/issues](https://github.com/company/commitment-platform/issues)
-- **Slack**: #commitment-platform-support
-- **Emergency**: +1-800-PLATFORM
+### v0.1
+- Initial release with PDF analysis
+- Basic recommendation generation
+- Simple web interface
+- Core AI processing engine
 
 ## 🤝 Contributing
 
 1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+2. Create a feature branch
+3. Make your changes
+4. Add tests for new functionality
+5. Submit a pull request
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License - see the LICENSE file for details.
 
-## 🙏 Acknowledgments
+## 🆘 Support
 
-- **AWS Cost Explorer API** for real-time spend data
-- **Flask** for the web framework
-- **Chart.js** for data visualization
-- **pdfplumber** for document processing
-- **boto3** for AWS integration
+For support and questions:
+- Create an issue in the repository
+- Check the documentation wiki
+- Review the troubleshooting guide
 
-## 📈 Roadmap
+## 🔮 Roadmap
 
-### v0.4 (Q1 2025)
-- [ ] Multi-cloud support (Azure, GCP)
-- [ ] Advanced ML recommendations
-- [ ] Mobile app for notifications
-- [ ] API for third-party integrations
-
-### v0.5 (Q2 2025)
-- [ ] Predictive analytics for spend forecasting
-- [ ] Custom credit type definitions
-- [ ] Advanced reporting and analytics
-- [ ] Enterprise SSO integration
-
----
-
-**Built with ❤️ for AWS customers to maximize their PPA value**
+### Upcoming Features
+- Advanced analytics and reporting
+- Multi-language support
+- Mobile application
+- Advanced AI models
+- Enterprise integrations
