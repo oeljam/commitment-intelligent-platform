@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Commitment Intelligent Platform</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f0f2f5;color:#333}
+.header{background:#232F3E;color:#fff;padding:14px 24px;display:flex;align-items:center;justify-content:space-between}
+.header h1{font-size:1.2em}.header small{color:#FF9900}
+.container{max-width:1200px;margin:0 auto;padding:20px}
+.card{background:#fff;border-radius:8px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.1);margin-bottom:16px}
+.grid{display:grid;gap:16px;margin-bottom:16px}
+.grid-3{grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
+.grid-2{grid-template-columns:1fr 1fr}
+.metric .val{font-size:1.8em;font-weight:700;color:#232F3E}
+.metric .lbl{color:#666;font-size:.85em;margin-top:4px}
+.metric .val.warn{color:#ffc107}.metric .val.good{color:#28a745}
+.btn{padding:8px 16px;border:none;border-radius:4px;cursor:pointer;font-size:.9em;font-weight:500;transition:.2s;display:inline-flex;align-items:center;gap:6px}
+.btn-primary{background:#FF9900;color:#fff}.btn-primary:hover{background:#e88900}
+.btn-accept{background:#28a745;color:#fff}.btn-reject{background:#dc3545;color:#fff}
+.btn-outline{background:transparent;border:1px solid #ccc;color:#333}.btn-outline:hover{background:#f5f5f5}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn-sm{padding:5px 10px;font-size:.8em}
+.btn-lg{padding:12px 24px;font-size:1em}
+
+/* Setup wizard */
+#setupPage{min-height:80vh;display:flex;align-items:center;justify-content:center}
+.setup-box{max-width:600px;width:100%}
+.setup-steps{display:flex;gap:0;margin-bottom:24px}
+.setup-step{flex:1;text-align:center;padding:10px;font-size:.85em;color:#999;border-bottom:3px solid #ddd;transition:.2s}
+.setup-step.active{color:#FF9900;border-color:#FF9900;font-weight:600}
+.setup-step.done{color:#28a745;border-color:#28a745}
+.step-content{display:none}.step-content.active{display:block}
+.upload-zone{border:2px dashed #ccc;border-radius:8px;padding:40px;text-align:center;cursor:pointer;transition:.2s}
+.upload-zone:hover,.upload-zone.dragover{border-color:#FF9900;background:#fff8f0}
+.upload-zone .icon{font-size:48px}
+.upload-zone.has-file{border-color:#28a745;background:#f8fff9}
+.team-chips{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+.team-chip{padding:6px 14px;border-radius:20px;border:1px solid #ccc;cursor:pointer;font-size:.85em;transition:.2s}
+.team-chip.selected{background:#FF9900;color:#fff;border-color:#FF9900}
+.custom-emails{width:100%;padding:10px;border:1px solid #ccc;border-radius:4px;font-family:inherit;min-height:60px;resize:vertical}
+
+/* Tabs */
+.tabs{display:flex;border-bottom:2px solid #e0e0e0;margin-bottom:16px}
+.tab{padding:10px 20px;cursor:pointer;font-weight:500;color:#666;border-bottom:2px solid transparent;margin-bottom:-2px;transition:.2s}
+.tab.active{color:#FF9900;border-color:#FF9900}
+.tab-content{display:none}.tab-content.active{display:block}
+
+/* Recs */
+.rec-card{border:1px solid #e0e0e0;border-radius:8px;padding:16px;margin-bottom:12px}
+.rec-card.qualified{border-left:4px solid #28a745}
+.rec-card.partially_qualified{border-left:4px solid #ffc107}
+.rec-card.not_qualified{border-left:4px solid #dc3545}
+.rec-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.badge{padding:3px 8px;border-radius:12px;font-size:.75em;font-weight:600;color:#fff}
+.badge-high{background:#28a745}.badge-medium{background:#ffc107;color:#333}.badge-low{background:#dc3545}
+.rec-meta{font-size:.85em;color:#555;line-height:1.6}
+.rec-savings{font-size:1.1em;font-weight:700;color:#FF9900;margin-top:6px}
+.rec-actions{margin-top:12px;display:flex;gap:8px}
+
+/* Coupling */
+.coupling-card{border:1px solid #e0e0e0;border-radius:8px;padding:14px;margin-bottom:10px}
+.coupling-card.qualified{border-left:4px solid #28a745;background:#f8fff9}
+.coupling-card.partially_qualified{border-left:4px solid #ffc107;background:#fffdf0}
+.coupling-card.opportunity{border-left:4px solid #17a2b8;background:#f0faff}
+.coupling-header{display:flex;justify-content:space-between;align-items:center}
+.coupling-discount{background:#FF9900;color:#fff;padding:2px 8px;border-radius:4px;font-weight:600;font-size:.85em}
+
+/* History */
+.hist-item{padding:12px;border-bottom:1px solid #eee;display:flex;justify-content:space-between;align-items:center;font-size:.9em}
+.hist-item:last-child{border:none}
+.hist-accepted{color:#28a745;font-weight:600}.hist-rejected{color:#dc3545;font-weight:600}
+
+/* Toast */
+.toast-wrap{position:fixed;top:16px;right:16px;z-index:999;display:flex;flex-direction:column;gap:8px}
+.toast{background:#fff;padding:12px 16px;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.15);border-left:4px solid #28a745;min-width:280px;animation:slideIn .3s ease;font-size:.9em}
+.toast.error{border-left-color:#dc3545}.toast.info{border-left-color:#17a2b8}
+@keyframes slideIn{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}
+
+/* Modal */
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:998;align-items:center;justify-content:center}
+.modal-bg.active{display:flex}
+.modal{background:#fff;border-radius:8px;padding:24px;width:90%;max-width:500px}
+.modal h3{margin-bottom:16px}
+.modal input,.modal textarea{width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;margin-bottom:12px;font-family:inherit}
+
+.spinner{display:inline-block;width:16px;height:16px;border:2px solid #fff;border-top-color:transparent;border-radius:50%;animation:spin .6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.empty{text-align:center;padding:30px;color:#999}
+canvas{max-height:280px}
+.section-title{margin-bottom:12px;font-size:1.05em}
+@media(max-width:768px){.grid-2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div><h1>🎯 Commitment Intelligent Platform</h1><small>Serverless - Bedrock AI - Cost Explorer</small></div>
+  <button class="btn btn-outline" style="color:#fff;border-color:#ffffff50" onclick="resetSetup()">⚙️ Setup</button>
+</div>
+
+<!-- ========== SETUP PAGE ========== -->
+<div id="setupPage">
+<div class="container"><div class="setup-box">
+  <div class="card">
+    <div class="setup-steps">
+      <div class="setup-step active" id="ss1">1. Upload PPA/EDP</div>
+      <div class="setup-step" id="ss2">2. Email Teams</div>
+      <div class="setup-step" id="ss3">3. Analyze</div>
+    </div>
+
+    <!-- Step 1: Upload -->
+    <div class="step-content active" id="step1">
+      <h3 style="margin-bottom:8px">Upload your PPA/EDP Document</h3>
+      <p style="color:#666;font-size:.9em;margin-bottom:16px">Upload the Private Pricing Addendum or Enterprise Discount Program PDF for AI analysis.</p>
+      <div class="upload-zone" id="uploadZone">
+        <div class="icon">📄</div>
+        <p><strong>Drop PDF here</strong> or click to browse</p>
+        <input type="file" id="fileInput" accept=".pdf" style="display:none">
+      </div>
+      <div id="uploadedFile" style="display:none;margin-top:12px;padding:10px;background:#f8fff9;border-radius:4px;color:#28a745">
+        <strong id="uploadedFileName"></strong> - ready for analysis
+      </div>
+      <div style="text-align:right;margin-top:16px">
+        <button class="btn btn-primary btn-lg" id="step1Next" onclick="goStep(2)" disabled>Next →</button>
+      </div>
+    </div>
+
+    <!-- Step 2: Email Config -->
+    <div class="step-content" id="step2">
+      <h3 style="margin-bottom:8px">Configure Email Distribution</h3>
+      <p style="color:#666;font-size:.9em;margin-bottom:16px">Select teams and add recipients who should receive recommendation notifications.</p>
+      <label style="font-size:.85em;font-weight:600">Predefined Teams</label>
+      <div class="team-chips" id="setupTeamChips">
+        <span class="team-chip" data-team="operations" onclick="toggleSetupTeam(this)">Operations</span>
+        <span class="team-chip" data-team="management" onclick="toggleSetupTeam(this)">Management</span>
+        <span class="team-chip" data-team="finance" onclick="toggleSetupTeam(this)">Finance</span>
+        <span class="team-chip" data-team="it_support" onclick="toggleSetupTeam(this)">IT Support</span>
+        <span class="team-chip" data-team="hr" onclick="toggleSetupTeam(this)">HR</span>
+        <span class="team-chip" data-team="legal" onclick="toggleSetupTeam(this)">Legal</span>
+      </div>
+      <label style="font-size:.85em;font-weight:600">Custom Recipients</label>
+      <textarea class="custom-emails" id="setupCustomEmails" placeholder="Enter email addresses, one per line or comma-separated..."></textarea>
+      <div style="display:flex;justify-content:space-between;margin-top:16px">
+        <button class="btn btn-outline" onclick="goStep(1)">← Back</button>
+        <button class="btn btn-primary btn-lg" onclick="goStep(3)">Next →</button>
+      </div>
+    </div>
+
+    <!-- Step 3: Analyze -->
+    <div class="step-content" id="step3">
+      <h3 style="margin-bottom:8px">Ready to Analyze</h3>
+      <div id="setupSummary" style="font-size:.9em;color:#555;margin-bottom:16px"></div>
+      <div id="analyzeStatus"></div>
+      <div style="display:flex;justify-content:space-between;margin-top:16px">
+        <button class="btn btn-outline" onclick="goStep(2)">← Back</button>
+        <button class="btn btn-primary btn-lg" id="analyzeBtn" onclick="runAnalysis()">🔍 Analyze with Bedrock AI</button>
+      </div>
+    </div>
+  </div>
+</div></div>
+</div>
+
+<!-- ========== DASHBOARD (hidden until setup complete) ========== -->
+<div id="dashboardPage" style="display:none">
+<div class="container">
+  <!-- Tabs -->
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('overview')">📊 Overview</div>
+    <div class="tab" onclick="switchTab('recommendations')">🎯 Recommendations</div>
+    <div class="tab" onclick="switchTab('history')">📈 History</div>
+  </div>
+
+  <!-- TAB: Overview -->
+  <div class="tab-content active" id="tab-overview">
+    <div class="grid grid-3">
+      <div class="card metric"><div class="val" id="mSpendYTD">-</div><div class="lbl">YTD Spend</div></div>
+      <div class="card metric"><div class="val" id="mCommitment">$50,000</div><div class="lbl">Annual Commitment</div></div>
+      <div class="card metric"><div class="val" id="mProgress">-</div><div class="lbl">Progress to Goal</div></div>
+      <div class="card metric"><div class="val" id="mMonthlyTarget">$4,167</div><div class="lbl">Monthly Target</div></div>
+      <div class="card metric"><div class="val" id="mRecs">0</div><div class="lbl">Recommendations</div></div>
+      <div class="card metric"><div class="val" id="mSavings">$0</div><div class="lbl">Potential Savings</div></div>
+    </div>
+    <div class="grid grid-2">
+      <div class="card"><h3 class="section-title">📊 Spend vs Commitment</h3><canvas id="spendChart"></canvas><div id="spendChartEmpty" class="empty">Loading...</div></div>
+      <div class="card"><h3 class="section-title">📊 Savings by Credit Type</h3><canvas id="savingsChart"></canvas><div id="savingsChartEmpty" class="empty">Analyze a document first</div></div>
+    </div>
+    <div class="card"><h3 class="section-title">🔗 Credit Coupling Analysis <small style="color:#666;font-weight:normal">(live)</small></h3><div id="couplingList"><div class="empty">Loading...</div></div></div>
+  </div>
+
+  <!-- TAB: Recommendations -->
+  <div class="tab-content" id="tab-recommendations">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <h3 class="section-title" style="margin:0">🎯 AI Recommendations</h3>
+        <button class="btn btn-outline btn-sm" onclick="document.getElementById('fileInput2').click()">📄 Upload New PDF</button>
+        <input type="file" id="fileInput2" accept=".pdf" style="display:none">
+      </div>
+      <div id="recList"><div class="empty">No recommendations yet.</div></div>
+    </div>
+  </div>
+
+  <!-- TAB: History -->
+  <div class="tab-content" id="tab-history">
+    <div class="card"><h3 class="section-title" style="margin-bottom:12px">📈 Decision History</h3><div id="histList"><div class="empty">No decisions yet.</div></div></div>
+  </div>
+</div>
+</div>
+
+<!-- Email Modal -->
+<div class="modal-bg" id="emailModal">
+  <div class="modal">
+    <h3>📧 Send Recommendation</h3>
+    <label style="font-size:.85em;color:#666">Teams</label>
+    <div class="team-chips" id="modalTeamChips"></div>
+    <label style="font-size:.85em;color:#666">Additional Recipients</label>
+    <input type="text" id="emailTo" placeholder="extra@example.com">
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-outline" onclick="closeEmail()">Cancel</button>
+      <button class="btn btn-primary" id="emailSendBtn" onclick="sendEmail()">Send</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-wrap" id="toasts"></div>
+
+<!-- JS will be inserted below -->
+<script>
+// === Config & State ===
+const ANNUAL_COMMITMENT = 50000, MONTHLY_TARGET = Math.round(ANNUAL_COMMITMENT/12);
+const TEAMS = {
+  operations:['ops-team@company.com','operations-manager@company.com'],
+  management:['ceo@company.com','cto@company.com','cfo@company.com'],
+  finance:['finance-team@company.com','accounting@company.com'],
+  it_support:['it-support@company.com','sysadmin@company.com'],
+  hr:['hr@company.com','people-ops@company.com'],
+  legal:['legal@company.com','compliance@company.com']
+};
+let API = localStorage.getItem('CIP_API_URL') || '';
+if (!API) { const u = prompt('Enter your API Gateway URL:'); if(u){localStorage.setItem('CIP_API_URL',u.replace(/\/$/,''));location.reload();}}
+
+let currentRecs=[], currentAnalysisId=null, spendData=null, spendChart=null, savingsChart=null;
+let uploadedDocId=null, uploadedS3Key=null, uploadedFileName=null;
+let setupTeams=new Set(), setupEmails='';
+
+function toast(msg,type='success'){const t=document.createElement('div');t.className=`toast ${type}`;t.textContent=msg;document.getElementById('toasts').appendChild(t);setTimeout(()=>t.remove(),4000);}
+
+// === Setup Wizard ===
+function goStep(n){
+  document.querySelectorAll('.step-content').forEach(s=>s.classList.remove('active'));
+  document.querySelectorAll('.setup-step').forEach(s=>s.classList.remove('active','done'));
+  document.getElementById('step'+n).classList.add('active');
+  for(let i=1;i<=3;i++){
+    const el=document.getElementById('ss'+i);
+    if(i<n) el.classList.add('done');
+    if(i===n) el.classList.add('active');
+  }
+  if(n===3) updateSetupSummary();
+}
+
+function toggleSetupTeam(el){const t=el.dataset.team;setupTeams.has(t)?setupTeams.delete(t):setupTeams.add(t);el.classList.toggle('selected');}
+
+function updateSetupSummary(){
+  setupEmails=document.getElementById('setupCustomEmails').value;
+  const teams=[...setupTeams];
+  let allRecipients=[];
+  teams.forEach(t=>{if(TEAMS[t])allRecipients.push(...TEAMS[t]);});
+  setupEmails.split(/[,\n]/).map(s=>s.trim()).filter(Boolean).forEach(e=>allRecipients.push(e));
+  allRecipients=[...new Set(allRecipients)];
+  document.getElementById('setupSummary').innerHTML=`
+    <div style="background:#f8f9fa;padding:12px;border-radius:6px">
+      <p><strong>📄 Document:</strong> ${uploadedFileName||'None'}</p>
+      <p><strong>👥 Teams:</strong> ${teams.length?teams.join(', '):'None selected'}</p>
+      <p><strong>📧 Recipients:</strong> ${allRecipients.length} email(s)</p>
+    </div>
+    <p style="margin-top:12px">Click <strong>Analyze</strong> to send the PDF to Bedrock AI for commitment and credit analysis.</p>`;
+}
+
+function resetSetup(){
+  document.getElementById('setupPage').style.display='';
+  document.getElementById('dashboardPage').style.display='none';
+  goStep(1);
+}
+
+// === File Upload ===
+const zone=document.getElementById('uploadZone'),fi=document.getElementById('fileInput');
+zone.onclick=()=>fi.click();
+zone.ondragover=e=>{e.preventDefault();zone.classList.add('dragover');};
+zone.ondragleave=()=>zone.classList.remove('dragover');
+zone.ondrop=e=>{e.preventDefault();zone.classList.remove('dragover');handleSetupFile(e.dataTransfer.files[0]);};
+fi.onchange=e=>handleSetupFile(e.target.files[0]);
+
+async function handleSetupFile(file){
+  if(!file||!file.name.endsWith('.pdf'))return toast('Please select a PDF','error');
+  zone.innerHTML=`<div class="icon"><span class="spinner" style="border-color:#FF9900;border-top-color:transparent;width:32px;height:32px"></span></div><p>Uploading ${file.name}...</p>`;
+  try{
+    const res=await fetch(`${API}/upload`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({filename:file.name,content_type:'application/pdf'})});
+    const data=await res.json();
+    await fetch(data.upload_url,{method:'PUT',headers:{'Content-Type':'application/pdf'},body:file});
+    uploadedDocId=data.doc_id; uploadedS3Key=data.s3_key; uploadedFileName=file.name;
+    zone.classList.add('has-file');
+    zone.innerHTML=`<div class="icon">✅</div><p><strong>${file.name}</strong> uploaded</p>`;
+    document.getElementById('step1Next').disabled=false;
+    toast('PDF uploaded successfully');
+  }catch(e){toast(e.message,'error');zone.innerHTML=`<div class="icon">📄</div><p><strong>Drop PDF here</strong> or click</p>`;}
+}
+
+// Re-upload from recommendations tab
+document.getElementById('fileInput2').onchange=async e=>{
+  const file=e.target.files[0];
+  if(!file||!file.name.endsWith('.pdf'))return toast('Select a PDF','error');
+  toast('Uploading...','info');
+  try{
+    const res=await fetch(`${API}/upload`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({filename:file.name,content_type:'application/pdf'})});
+    const data=await res.json();
+    await fetch(data.upload_url,{method:'PUT',headers:{'Content-Type':'application/pdf'},body:file});
+    uploadedDocId=data.doc_id;uploadedS3Key=data.s3_key;uploadedFileName=file.name;
+    toast('Analyzing...','info');
+    await doAnalyze();
+  }catch(e){toast(e.message,'error');}
+};
+// === Analysis ===
+async function runAnalysis(){
+  const btn=document.getElementById('analyzeBtn');
+  btn.disabled=true;btn.innerHTML='<span class="spinner"></span> Analyzing...';
+  document.getElementById('analyzeStatus').innerHTML='<p style="color:#666">Sending PDF to Bedrock Claude Haiku 4.5 for analysis...</p>';
+  try{ await doAnalyze(); }catch(e){toast(e.message,'error');document.getElementById('analyzeStatus').innerHTML=`<p style="color:#dc3545">${e.message}</p>`;}
+  btn.disabled=false;btn.innerHTML='🔍 Analyze with Bedrock AI';
+}
+
+async function doAnalyze(){
+  const res=await fetch(`${API}/analyze`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({doc_id:uploadedDocId,s3_key:uploadedS3Key})});
+  const data=await res.json();
+  if(data.error)throw new Error(data.error);
+  currentAnalysisId=data.analysis_id;currentRecs=data.recommendations;
+  // Save config
+  localStorage.setItem('CIP_SETUP',JSON.stringify({teams:[...setupTeams],emails:setupEmails,fileName:uploadedFileName,analysisId:currentAnalysisId}));
+  showDashboard();
+}
+
+function showDashboard(){
+  document.getElementById('setupPage').style.display='none';
+  document.getElementById('dashboardPage').style.display='';
+  renderRecs();updateRecMetrics();updateSavingsChart();loadSpend();loadHistory();
+  toast(`${currentRecs.length} recommendations generated`);
+}
+
+// === Tabs ===
+function switchTab(name){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
+  document.querySelector(`.tab-content#tab-${name}`).classList.add('active');
+  event.target.classList.add('active');
+  if(name==='history')loadHistory();
+}
+
+// === Spend (Cost Explorer) ===
+async function loadSpend(){
+  try{
+    const res=await fetch(`${API}/spend`);spendData=await res.json();
+    if(spendData.error){document.getElementById('spendChartEmpty').textContent=spendData.error;return;}
+    const ytd=spendData.total_spend_ytd,pct=((ytd/ANNUAL_COMMITMENT)*100).toFixed(1);
+    document.getElementById('mSpendYTD').textContent='$'+ytd.toLocaleString();
+    document.getElementById('mProgress').textContent=pct+'%';
+    document.getElementById('mProgress').className='val '+(parseFloat(pct)>50?'good':'warn');
+    renderSpendChart();renderCouplings();
+  }catch(e){document.getElementById('spendChartEmpty').textContent='Failed to load';}
+}
+
+function renderSpendChart(){
+  if(!spendData?.months?.length)return;
+  document.getElementById('spendChartEmpty').style.display='none';
+  if(spendChart)spendChart.destroy();
+  spendChart=new Chart(document.getElementById('spendChart'),{
+    type:'line',
+    data:{labels:spendData.months.map(m=>m.period),datasets:[
+      {label:'Actual Spend',data:spendData.months.map(m=>m.spend),borderColor:'#FF9900',backgroundColor:'rgba(255,153,0,.1)',fill:true,tension:.3},
+      {label:'Monthly Target',data:spendData.months.map(()=>MONTHLY_TARGET),borderColor:'#28a745',borderDash:[5,5],pointRadius:0}
+    ]},
+    options:{responsive:true,scales:{y:{beginAtZero:true,ticks:{callback:v=>'$'+v.toLocaleString()}}},plugins:{legend:{position:'top'}}}
+  });
+}
+
+function renderCouplings(){
+  const el=document.getElementById('couplingList');
+  if(!spendData?.credit_couplings?.length){el.innerHTML='<div class="empty">No data</div>';return;}
+  el.innerHTML=spendData.credit_couplings.map(c=>`
+    <div class="coupling-card ${c.status}">
+      <div class="coupling-header">
+        <strong>${{qualified:'✅',partially_qualified:'⚠️',opportunity:'🎯'}[c.status]||''} ${c.credit_name}</strong>
+        <span class="coupling-discount">${c.discount}</span>
+      </div>
+      <div style="font-size:.85em;color:#555;margin-top:6px">
+        <span><strong>Matched:</strong> $${c.matched_spend} / $${c.min_spend} min</span> &nbsp;|&nbsp;
+        <span><strong>Savings:</strong> <span style="color:#FF9900;font-weight:600">$${c.potential_savings}/mo</span></span>
+        ${Object.keys(c.matched_services).length?` &nbsp;|&nbsp; <span>${Object.entries(c.matched_services).map(([s,v])=>s.split(' - ')[0]+' $'+v).join(', ')}</span>`:''}
+      </div>
+    </div>`).join('');
+}
+
+function updateSavingsChart(){
+  const groups={};
+  currentRecs.forEach(r=>{groups[r.credit_type]=(groups[r.credit_type]||0)+Number(r.potential_savings||0);});
+  const labels=Object.keys(groups);
+  if(!labels.length){document.getElementById('savingsChartEmpty').style.display='block';return;}
+  document.getElementById('savingsChartEmpty').style.display='none';
+  if(savingsChart)savingsChart.destroy();
+  savingsChart=new Chart(document.getElementById('savingsChart'),{
+    type:'bar',data:{labels,datasets:[{label:'Annual Savings ($)',data:Object.values(groups),backgroundColor:['#FF9900','#28a745','#17a2b8','#dc3545','#6f42c1','#fd7e14']}]},
+    options:{responsive:true,scales:{y:{beginAtZero:true,ticks:{callback:v=>'$'+v.toLocaleString()}}},plugins:{legend:{display:false}}}
+  });
+}
+// === Recommendations ===
+function renderRecs(){
+  const el=document.getElementById('recList');
+  if(!currentRecs.length){el.innerHTML='<div class="empty">No recommendations yet.</div>';return;}
+  el.innerHTML=currentRecs.map((r,i)=>`
+    <div class="rec-card ${r.qualification}">
+      <div class="rec-header"><strong>${r.title}</strong><span class="badge badge-${r.confidence}">${r.confidence}</span></div>
+      <div class="rec-meta">
+        <div><strong>Workload:</strong> ${r.workload}</div>
+        <div><strong>Usage:</strong> ${r.usage_pattern}</div>
+        <div><strong>Credit:</strong> ${r.credit_type}</div>
+        <div><strong>Reasoning:</strong> ${r.reasoning}</div>
+        <div class="rec-savings">Potential Savings: $${Number(r.potential_savings).toLocaleString()}/yr</div>
+      </div>
+      <div class="rec-actions" id="actions-${i}">
+        <button class="btn btn-accept btn-sm" onclick="decide(${i},'accepted')">✅ Accept</button>
+        <button class="btn btn-reject btn-sm" onclick="decide(${i},'rejected')">❌ Reject</button>
+        <button class="btn btn-outline btn-sm" onclick="openEmail(${i})">📧 Email</button>
+      </div>
+    </div>`).join('');
+}
+
+async function decide(idx,action){
+  const r=currentRecs[idx];
+  try{
+    await fetch(`${API}/decision`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({analysis_id:currentAnalysisId,rec_id:r.id,action})});
+    r._status=action;
+    document.getElementById(`actions-${idx}`).innerHTML=`<span class="${action==='accepted'?'hist-accepted':'hist-rejected'}">${action.toUpperCase()}</span>`;
+    toast(`${r.title} - ${action}`);updateRecMetrics();
+  }catch(e){toast(e.message,'error');}
+}
+
+function updateRecMetrics(){
+  const savings=currentRecs.reduce((s,r)=>s+Number(r.potential_savings||0),0);
+  document.getElementById('mRecs').textContent=currentRecs.length;
+  document.getElementById('mSavings').textContent='$'+savings.toLocaleString();
+}
+
+// === Email ===
+let emailRecIdx=null,modalTeams=new Set();
+
+function openEmail(idx){
+  emailRecIdx=idx;modalTeams=new Set(setupTeams);
+  const chips=document.getElementById('modalTeamChips');
+  chips.innerHTML=[...Object.keys(TEAMS)].map(t=>`<span class="team-chip ${modalTeams.has(t)?'selected':''}" data-team="${t}" onclick="toggleModalTeam(this)">${t.replace('_',' ')}</span>`).join('');
+  document.getElementById('emailTo').value='';
+  document.getElementById('emailModal').classList.add('active');
+}
+function closeEmail(){document.getElementById('emailModal').classList.remove('active');}
+function toggleModalTeam(el){const t=el.dataset.team;modalTeams.has(t)?modalTeams.delete(t):modalTeams.add(t);el.classList.toggle('selected');}
+
+async function sendEmail(){
+  let recipients=[];
+  modalTeams.forEach(t=>{if(TEAMS[t])recipients.push(...TEAMS[t]);});
+  document.getElementById('emailTo').value.split(',').map(s=>s.trim()).filter(Boolean).forEach(e=>recipients.push(e));
+  recipients=[...new Set(recipients)];
+  if(!recipients.length)return toast('Select a team or enter recipients','error');
+  try{
+    document.getElementById('emailSendBtn').disabled=true;
+    await fetch(`${API}/send-email`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({recipients,recommendation:currentRecs[emailRecIdx]})});
+    toast(`Email sent to ${recipients.length} recipient(s)`);closeEmail();
+  }catch(e){toast(e.message,'error');}
+  document.getElementById('emailSendBtn').disabled=false;
+}
+
+// === History ===
+async function loadHistory(){
+  try{
+    const res=await fetch(`${API}/history`);const data=await res.json();
+    const el=document.getElementById('histList');
+    if(!data.history?.length){el.innerHTML='<div class="empty">No decisions yet.</div>';return;}
+    el.innerHTML=data.history.map(h=>`
+      <div class="hist-item">
+        <div><strong>${h.rec_id}</strong><br><small>${new Date(h.SK?.split('#')[0]).toLocaleString()}</small></div>
+        <span class="${h.action==='accepted'?'hist-accepted':'hist-rejected'}">${h.action?.toUpperCase()}</span>
+      </div>`).join('');
+  }catch(e){}
+}
+
+// === Init: restore session if exists ===
+(function init(){
+  const saved=localStorage.getItem('CIP_SETUP');
+  if(saved){
+    try{
+      const cfg=JSON.parse(saved);
+      if(cfg.analysisId){
+        // Restore state and go to dashboard
+        currentAnalysisId=cfg.analysisId;
+        setupTeams=new Set(cfg.teams||[]);
+        setupEmails=cfg.emails||'';
+        uploadedFileName=cfg.fileName||'';
+        // Load recommendations from API
+        fetch(`${API}/recommendations?analysis_id=${cfg.analysisId}`)
+          .then(r=>r.json()).then(d=>{
+            if(d.recommendations?.length){
+              currentRecs=d.recommendations;showDashboard();
+            }
+          }).catch(()=>{});
+        return;
+      }
+    }catch(e){}
+  }
+  // Show setup
+  document.getElementById('setupPage').style.display='';
+})();
+
+</script>
+</body>
+</html>
