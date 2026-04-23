@@ -137,6 +137,9 @@ Resources:
             - Effect: Allow
               Action: bedrock:InvokeModel
               Resource: '*'
+            - Effect: Allow
+              Action: ce:GetCostAndUsage
+              Resource: '*'
       Events:
         Api:
           Type: HttpApi
@@ -235,6 +238,47 @@ Resources:
             ApiId: !Ref Api
             Path: /spend
             Method: GET
+
+  AttestationsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: lambdas/
+      Handler: api.handle_attestations
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref RecommendationsTable
+      Events:
+        Get:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref Api
+            Path: /attestations
+            Method: GET
+        Post:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref Api
+            Path: /attestations
+            Method: POST
+
+  ReminderFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: lambdas/
+      Handler: api.handle_reminder
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref RecommendationsTable
+        - Statement:
+            - Effect: Allow
+              Action: [ses:SendEmail, ses:SendRawEmail]
+              Resource: '*'
+      Events:
+        DailyCheck:
+          Type: Schedule
+          Properties:
+            Schedule: rate(1 day)
+            Description: Check for attestations due within 7 days
 
 Outputs:
   ApiUrl:

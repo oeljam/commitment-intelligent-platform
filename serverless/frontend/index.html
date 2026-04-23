@@ -70,6 +70,20 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
 /* History */
 .hist-item{padding:12px;border-bottom:1px solid #eee;display:flex;justify-content:space-between;align-items:center;font-size:.9em}
+
+/* Attestations */
+.att-card{border:1px solid #e0e0e0;border-radius:8px;padding:16px;margin-bottom:12px}
+.att-card.pending{border-left:4px solid #ffc107}
+.att-card.in_progress{border-left:4px solid #17a2b8}
+.att-card.completed{border-left:4px solid #28a745;opacity:.7}
+.att-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.att-due{font-size:.85em;padding:3px 8px;border-radius:12px;font-weight:600}
+.att-due.overdue{background:#dc3545;color:#fff}
+.att-due.soon{background:#ffc107;color:#333}
+.att-due.ok{background:#e0e0e0;color:#555}
+.att-fields{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0}
+.att-fields label{font-size:.8em;color:#666;display:block;margin-bottom:2px}
+.att-fields input,.att-fields select{width:100%;padding:6px 8px;border:1px solid #ccc;border-radius:4px;font-size:.85em}
 .hist-item:last-child{border:none}
 .hist-accepted{color:#28a745;font-weight:600}.hist-rejected{color:#dc3545;font-weight:600}
 
@@ -170,6 +184,7 @@ canvas{max-height:280px}
   <div class="tabs">
     <div class="tab active" onclick="switchTab('overview')">📊 Overview</div>
     <div class="tab" onclick="switchTab('recommendations')">🎯 Recommendations</div>
+    <div class="tab" onclick="switchTab('attestations')">📋 Attestations</div>
     <div class="tab" onclick="switchTab('history')">📈 History</div>
   </div>
 
@@ -199,6 +214,17 @@ canvas{max-height:280px}
         <input type="file" id="fileInput2" accept=".pdf" style="display:none">
       </div>
       <div id="recList"><div class="empty">No recommendations yet.</div></div>
+    </div>
+  </div>
+
+  <!-- TAB: Attestations -->
+  <div class="tab-content" id="tab-attestations">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <h3 class="section-title" style="margin:0">📋 Attestation Tracker</h3>
+        <span id="attCount" style="font-size:.85em;color:#666"></span>
+      </div>
+      <div id="attList"><div class="empty">No attestations yet. Analyze a PPA/EDP document first.</div></div>
     </div>
   </div>
 
@@ -241,7 +267,7 @@ const TEAMS = {
 let API = localStorage.getItem('CIP_API_URL') || '';
 if (!API) { const u = prompt('Enter your API Gateway URL:'); if(u){localStorage.setItem('CIP_API_URL',u.replace(/\/$/,''));location.reload();}}
 
-let currentRecs=[], currentAnalysisId=null, spendData=null, spendChart=null, savingsChart=null;
+let currentRecs=[], currentAttestations=[], currentAnalysisId=null, spendData=null, spendChart=null, savingsChart=null;
 let uploadedDocId=null, uploadedS3Key=null, uploadedFileName=null;
 let setupTeams=new Set(), setupEmails='';
 
@@ -334,7 +360,7 @@ async function doAnalyze(){
   const res=await fetch(`${API}/analyze`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({doc_id:uploadedDocId,s3_key:uploadedS3Key})});
   const data=await res.json();
   if(data.error)throw new Error(data.error);
-  currentAnalysisId=data.analysis_id;currentRecs=data.recommendations;
+  currentAnalysisId=data.analysis_id;currentRecs=data.recommendations;currentAttestations=data.attestations||[];
   // Save config
   localStorage.setItem('CIP_SETUP',JSON.stringify({teams:[...setupTeams],emails:setupEmails,fileName:uploadedFileName,analysisId:currentAnalysisId}));
   showDashboard();
@@ -343,8 +369,8 @@ async function doAnalyze(){
 function showDashboard(){
   document.getElementById('setupPage').style.display='none';
   document.getElementById('dashboardPage').style.display='';
-  renderRecs();updateRecMetrics();updateSavingsChart();loadSpend();loadHistory();
-  toast(`${currentRecs.length} recommendations generated`);
+  renderRecs();updateRecMetrics();updateSavingsChart();loadSpend();loadHistory();renderAttestations();
+  toast(`${currentRecs.length} recommendations, ${currentAttestations.length} attestations`);
 }
 
 // === Tabs ===
@@ -354,6 +380,7 @@ function switchTab(name){
   document.querySelector(`.tab-content#tab-${name}`).classList.add('active');
   event.target.classList.add('active');
   if(name==='history')loadHistory();
+  if(name==='attestations')loadAttestations();
 }
 
 // === Spend (Cost Explorer) ===
@@ -426,6 +453,15 @@ function renderRecs(){
         <div><strong>Reasoning:</strong> ${r.reasoning}</div>
         <div class="rec-savings">Potential Savings: $${Number(r.potential_savings).toLocaleString()}/yr</div>
       </div>
+      ${r.what_if?`<div style="background:#f0faff;border:1px solid #17a2b8;border-radius:6px;padding:12px;margin-top:10px">
+        <div style="font-weight:600;color:#17a2b8;font-size:.85em;margin-bottom:6px">💡 What-If Scenario</div>
+        <div style="font-size:.85em;color:#333">${r.what_if.scenario||''}</div>
+        <div style="display:flex;gap:16px;margin-top:8px;font-size:.85em;flex-wrap:wrap">
+          <span>📈 <strong>${r.what_if.new_qualification||''}</strong></span>
+          <span>💰 <strong style="color:#FF9900">$${Number(r.what_if.new_savings||0).toLocaleString()}/yr</strong></span>
+          <span>⚙️ Effort: <strong>${r.what_if.effort||'—'}</strong></span>
+        </div>
+        ${r.what_if.spend_change?`<div style="font-size:.8em;color:#666;margin-top:6px">Change: ${Object.entries(r.what_if.spend_change).map(([s,v])=>s+' → $'+v+'/mo').join(', ')}</div>`:''}</div>`:``}
       <div class="rec-actions" id="actions-${i}">
         <button class="btn btn-accept btn-sm" onclick="decide(${i},'accepted')">✅ Accept</button>
         <button class="btn btn-reject btn-sm" onclick="decide(${i},'rejected')">❌ Reject</button>
@@ -491,6 +527,93 @@ async function loadHistory(){
   }catch(e){}
 }
 
+// === Attestations ===
+async function loadAttestations(){
+  try{
+    const res=await fetch(`${API}/attestations?analysis_id=${currentAnalysisId}`);
+    const data=await res.json();
+    if(data.attestations?.length){currentAttestations=data.attestations;renderAttestations();}
+  }catch(e){}
+}
+
+function renderAttestations(){
+  const el=document.getElementById('attList');
+  if(!currentAttestations.length){el.innerHTML='<div class="empty">No attestations found. Analyze a PPA/EDP document first.</div>';return;}
+  const now=new Date();
+  const pending=currentAttestations.filter(a=>a.status!=='completed').length;
+  document.getElementById('attCount').textContent=`${pending} pending of ${currentAttestations.length}`;
+
+  el.innerHTML=currentAttestations.map((a,i)=>{
+    const due=a.next_due?new Date(a.next_due+'T00:00:00'):null;
+    const daysLeft=due?Math.ceil((due-now)/(1000*60*60*24)):999;
+    const dueClass=daysLeft<0?'overdue':daysLeft<=7?'soon':'ok';
+    const dueLabel=daysLeft<0?`${Math.abs(daysLeft)}d overdue`:daysLeft===0?'Due today':`${daysLeft}d left`;
+    const fields=typeof a.fields==='string'?JSON.parse(a.fields):a.fields||[];
+    const filled=typeof a.filled_fields==='string'?JSON.parse(a.filled_fields||'{}'):a.filled_fields||{};
+    const status=a.status||'pending';
+
+    return `<div class="att-card ${status}">
+      <div class="att-header">
+        <div><strong>${a.name||a.id}</strong><br><span style="font-size:.8em;color:#666">${a.frequency||''} · Owner: ${a.owner||'—'}</span></div>
+        <span class="att-due ${dueClass}">${due?dueLabel:'No date'}</span>
+      </div>
+      <p style="font-size:.85em;color:#555;margin:6px 0">${a.description||''}</p>
+      ${status==='completed'?`<div style="color:#28a745;font-weight:600;font-size:.9em">✅ Completed${a.updated_at?' on '+new Date(a.updated_at).toLocaleDateString():''}</div>`:`
+      <div class="att-fields" id="att-fields-${i}">
+        ${fields.map((f,fi)=>`<div>
+          <label>${f.label}</label>
+          ${f.type==='select'?`<select data-field="${f.label}"><option value="">Select...</option><option>Yes</option><option>No</option><option>N/A</option></select>`
+          :`<input type="${f.type==='number'?'number':f.type==='date'?'date':'text'}" data-field="${f.label}" placeholder="${f.label}" value="${filled[f.label]||''}">`}
+        </div>`).join('')}
+      </div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button class="btn btn-primary btn-sm" onclick="saveAttestation(${i},'update')">💾 Save</button>
+        <button class="btn btn-accept btn-sm" onclick="saveAttestation(${i},'complete')">✅ Mark Complete</button>
+        <button class="btn btn-outline btn-sm" onclick="emailAttestation(${i})">📧 Send to AWS</button>
+      </div>`}
+    </div>`;
+  }).join('');
+}
+
+async function saveAttestation(idx,action){
+  const a=currentAttestations[idx];
+  const container=document.getElementById('att-fields-'+idx);
+  const filled={};
+  if(container){container.querySelectorAll('input,select').forEach(el=>{if(el.dataset.field&&el.value)filled[el.dataset.field]=el.value;});}
+  try{
+    await fetch(`${API}/attestations`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({analysis_id:currentAnalysisId,att_id:a.id||a.SK?.split('#')[1],action,filled_fields:filled})});
+    a.status=action==='complete'?'completed':'in_progress';
+    a.filled_fields=filled;
+    a.updated_at=new Date().toISOString();
+    renderAttestations();
+    toast(action==='complete'?`${a.name} marked complete`:`${a.name} saved`);
+  }catch(e){toast(e.message,'error');}
+}
+
+async function emailAttestation(idx){
+  const a=currentAttestations[idx];
+  const filled=typeof a.filled_fields==='string'?JSON.parse(a.filled_fields||'{}'):a.filled_fields||{};
+  const fieldRows=Object.entries(filled).map(([k,v])=>`<tr><td style="padding:6px;border-bottom:1px solid #ddd"><strong>${k}</strong></td><td style="padding:6px;border-bottom:1px solid #ddd">${v}</td></tr>`).join('');
+  const rec={
+    title:`Attestation: ${a.name}`,
+    credit_type:a.frequency||'',
+    qualification:a.status||'pending',
+    potential_savings:0,
+    status:a.status||'pending',
+    reasoning:`Due: ${a.next_due||'N/A'}. Owner: ${a.owner||'N/A'}. ${a.description||''}\n\nFilled Fields:\n${Object.entries(filled).map(([k,v])=>k+': '+v).join('\n')}`
+  };
+  // Gather recipients from setup
+  let recipients=[];
+  setupTeams.forEach(t=>{if(TEAMS[t])recipients.push(...TEAMS[t]);});
+  recipients=[...new Set(recipients)];
+  if(!recipients.length)recipients=[prompt('Enter recipient email:')].filter(Boolean);
+  if(!recipients.length)return toast('No recipients','error');
+  try{
+    await fetch(`${API}/send-email`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({recipients,subject:`Attestation Submission: ${a.name} - Due ${a.next_due||'N/A'}`,recommendation:rec})});
+    toast(`Attestation sent to ${recipients.length} recipient(s)`);
+  }catch(e){toast(e.message,'error');}
+}
+
 // === Init: restore session if exists ===
 (function init(){
   const saved=localStorage.getItem('CIP_SETUP');
@@ -510,6 +633,8 @@ async function loadHistory(){
               currentRecs=d.recommendations;showDashboard();
             }
           }).catch(()=>{});
+        fetch(`${API}/attestations?analysis_id=${cfg.analysisId}`)
+          .then(r=>r.json()).then(d=>{currentAttestations=d.attestations||[];renderAttestations();}).catch(()=>{});
         return;
       }
     }catch(e){}
