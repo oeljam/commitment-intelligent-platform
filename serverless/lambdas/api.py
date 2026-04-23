@@ -137,7 +137,17 @@ def handle_analyze_worker(event, context):
         # Get live spend from Cost Explorer
         spend = _get_spend_summary()
 
-        prompt = f"""You are an AWS commitment optimization expert. Analyze the attached PPA/EDP document AND the customer's live AWS spend data below. Cross-reference the credit programs in the PPA against actual service usage to determine qualification.
+        # Get past decision history for learning loop
+        hist_result = table.query(KeyConditionExpression=boto3.dynamodb.conditions.Key('PK').eq('HISTORY'), ScanIndexForward=False, Limit=20)
+        history_ctx = ''
+        if hist_result['Items']:
+            decisions = [f"- {h.get('action','').upper()}: {h.get('rec_id','')} — {h.get('notes','no notes')}" for h in hist_result['Items']]
+            history_ctx = f"""
+
+PAST USER DECISIONS (learn from these — prioritize credit types the user accepted, deprioritize rejected ones):
+{chr(10).join(decisions)}"""
+
+        prompt = f"""You are an AWS commitment optimization expert. Analyze the attached PPA/EDP document AND the customer's live AWS spend data below. Cross-reference the credit programs in the PPA against actual service usage to determine qualification.{history_ctx}
 
 Think through scenarios: if the customer increased or shifted spend on certain services, would they unlock new credit programs or move from partially_qualified to qualified? Include these what-if scenarios as part of each recommendation.
 
