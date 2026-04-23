@@ -126,7 +126,31 @@ Resources:
     Properties:
       CodeUri: lambdas/
       Handler: api.handle_analyze
-      Timeout: 120
+      Timeout: 10
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref RecommendationsTable
+        - Statement:
+            - Effect: Allow
+              Action: lambda:InvokeFunction
+              Resource: !GetAtt AnalyzeWorkerFunction.Arn
+      Environment:
+        Variables:
+          ANALYZE_WORKER_ARN: !GetAtt AnalyzeWorkerFunction.Arn
+      Events:
+        Api:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref Api
+            Path: /analyze
+            Method: POST
+
+  AnalyzeWorkerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: lambdas/
+      Handler: api.handle_analyze_worker
+      Timeout: 180
       MemorySize: 512
       Policies:
         - S3ReadPolicy:
@@ -140,13 +164,6 @@ Resources:
             - Effect: Allow
               Action: ce:GetCostAndUsage
               Resource: '*'
-      Events:
-        Api:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref Api
-            Path: /analyze
-            Method: POST
 
   RecommendationsFunction:
     Type: AWS::Serverless::Function

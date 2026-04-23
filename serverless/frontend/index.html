@@ -360,10 +360,24 @@ async function doAnalyze(){
   const res=await fetch(`${API}/analyze`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({doc_id:uploadedDocId,s3_key:uploadedS3Key})});
   const data=await res.json();
   if(data.error)throw new Error(data.error);
-  currentAnalysisId=data.analysis_id;currentRecs=data.recommendations;currentAttestations=data.attestations||[];
-  // Save config
-  localStorage.setItem('CIP_SETUP',JSON.stringify({teams:[...setupTeams],emails:setupEmails,fileName:uploadedFileName,analysisId:currentAnalysisId}));
-  showDashboard();
+  currentAnalysisId=data.analysis_id;
+  // Poll for results
+  const status=document.getElementById('analyzeStatus');
+  if(status)status.innerHTML='<p style="color:#666">⏳ Bedrock AI is analyzing your document + live spend data... (30-60s)</p>';
+  for(let i=0;i<60;i++){
+    await new Promise(r=>setTimeout(r,3000));
+    const poll=await fetch(`${API}/recommendations?analysis_id=${currentAnalysisId}`);
+    const pdata=await poll.json();
+    if(pdata.status==='complete'){
+      currentRecs=pdata.recommendations;
+      // Load attestations too
+      try{const ar=await fetch(`${API}/attestations?analysis_id=${currentAnalysisId}`);const ad=await ar.json();currentAttestations=ad.attestations||[];}catch(e){}
+      localStorage.setItem('CIP_SETUP',JSON.stringify({teams:[...setupTeams],emails:setupEmails,fileName:uploadedFileName,analysisId:currentAnalysisId}));
+      showDashboard();return;
+    }
+    if(pdata.status==='error')throw new Error(pdata.error||'Analysis failed');
+  }
+  throw new Error('Analysis timed out');
 }
 
 function showDashboard(){

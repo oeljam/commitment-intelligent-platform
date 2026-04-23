@@ -63,12 +63,71 @@ def _get_spend_summary():
         return {'ytd_spend': 'unavailable', 'current_month_by_service': {}}
 
 
-# --- Analyze with Bedrock ---
+# --- Analyze: async trigger ---
 def handle_analyze(event, context):
     try:
         body = json.loads(event.get('body', '{}'))
         doc_id = body.get('doc_id')
         s3_key = body.get('s3_key')
+        analysis_id = str(uuid.uuid4())
+
+        # Mark as processing
+        table.update_item(Key={'PK': 'DOC', 'SK': doc_id}, UpdateExpression='SET #s = :s, analysis_id = :a', ExpressionAttributeNames={'#s': 'status'}, ExpressionAttributeValues={':s': 'processing', ':a': analysis_id})
+
+        # Invoke worker async
+        boto3.client('lambda').invoke(
+            FunctionName=os.environ.get('ANALYZE_WORKER_ARN', context.function_name.replace('AnalyzeFunction', 'AnalyzeWorkerFunction')),
+            InvocationType='Event',
+            Payload=json.dumps({'doc_id': doc_id, 's3_key': s3_key, 'analysis_id': analysis_id})
+        )
+        return resp(200, {'analysis_id': analysis_id, 'status': 'processing'})
+    except Exception as e:
+        return resp(500, {'error': str(e)})
+
+
+def _repair_json(text):
+    """Attempt to parse JSON, repairing truncation if needed."""
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+    # Try closing open braces/brackets
+    fixed = text.rstrip()
+    # Remove trailing comma
+    fixed = fixed.rstrip(',')
+    # Count open vs close
+    opens = fixed.count('{') - fixed.count('}')
+    open_arr = fixed.count('[') - fixed.count(']')
+    # Close any open string
+    if fixed.count('"') % 2 == 1:
+        fixed += '"'
+    fixed += '}' * max(opens, 0)
+    fixed += ']' * max(open_arr, 0)
+    try:
+        return json.loads(fixed)
+    except json.JSONDecodeError:
+        pass
+    # Last resort: find the last complete object in recommendations array
+    try:
+        idx = text.rfind('}')
+        if idx > 0:
+            candidate = text[:idx+1]
+            candidate = candidate.rstrip(',') + ']}'
+            # Ensure attestations key exists
+            if '"attestations"' not in candidate:
+                candidate = candidate.rstrip('}') + ', "attestations": []}'
+            return json.loads(candidate)
+    except json.JSONDecodeError:
+        pass
+    raise ValueError(f"Cannot parse Bedrock response (length {len(text)})")
+
+
+# --- Analyze: worker (invoked async) ---
+def handle_analyze_worker(event, context):
+    try:
+        doc_id = event['doc_id']
+        s3_key = event['s3_key']
+        analysis_id = event['analysis_id']
 
         # Get PDF from S3
         pdf_obj = s3.get_object(Bucket=BUCKET, Key=s3_key)
@@ -118,7 +177,7 @@ Return ONLY the JSON object, no other text."""
 
         bedrock_body = json.dumps({
             "anthropic_version": "bedrock-2023-05-31",
-            "max_tokens": 4096,
+            "max_tokens": 8192,
             "messages": [
                 {"role": "user", "content": [
                     {"type": "document", "source": {"type": "base64", "media_type": "application/pdf", "data": pdf_b64}},
@@ -138,7 +197,7 @@ Return ONLY the JSON object, no other text."""
             if cleaned.endswith('```'):
                 cleaned = cleaned[:-3]
             cleaned = cleaned.strip()
-        parsed = json.loads(cleaned)
+        parsed = _repair_json(cleaned)
 
         # Support both old (array) and new (object) response formats
         if isinstance(parsed, list):
@@ -148,16 +207,20 @@ Return ONLY the JSON object, no other text."""
             attestations = parsed.get('attestations', [])
 
         # Store in DynamoDB
-        analysis_id = str(uuid.uuid4())
         now = datetime.utcnow().isoformat()
 
         for rec in recommendations:
             rec_id = rec.get('id', str(uuid.uuid4()))
-            table.put_item(Item={
-                'PK': f'ANALYSIS#{analysis_id}', 'SK': f'REC#{rec_id}',
-                'doc_id': doc_id, 'status': 'pending', 'created_at': now,
-                **{k: str(v) if isinstance(v, (int, float)) else v for k, v in rec.items()}
-            })
+            # Convert all nested dicts/lists to JSON strings and numbers to strings for DynamoDB
+            item = {'PK': f'ANALYSIS#{analysis_id}', 'SK': f'REC#{rec_id}', 'doc_id': doc_id, 'status': 'pending', 'created_at': now}
+            for k, v in rec.items():
+                if isinstance(v, (dict, list)):
+                    item[k] = json.dumps(v)
+                elif isinstance(v, (int, float)):
+                    item[k] = str(v)
+                else:
+                    item[k] = v
+            table.put_item(Item=item)
 
         for att in attestations:
             att_id = att.get('id', str(uuid.uuid4()))
@@ -170,9 +233,13 @@ Return ONLY the JSON object, no other text."""
         # Update doc status
         table.update_item(Key={'PK': 'DOC', 'SK': doc_id}, UpdateExpression='SET #s = :s, analysis_id = :a', ExpressionAttributeNames={'#s': 'status'}, ExpressionAttributeValues={':s': 'analyzed', ':a': analysis_id})
 
-        return resp(200, {'analysis_id': analysis_id, 'recommendations': recommendations, 'attestations': attestations, 'spend_context': spend})
+        return {'analysis_id': analysis_id, 'status': 'complete', 'recommendations': len(recommendations), 'attestations': len(attestations)}
     except Exception as e:
-        return resp(500, {'error': str(e)})
+        # Mark doc as failed
+        try:
+            table.update_item(Key={'PK': 'DOC', 'SK': event.get('doc_id','')}, UpdateExpression='SET #s = :s, #e = :e', ExpressionAttributeNames={'#s': 'status', '#e': 'error'}, ExpressionAttributeValues={':s': 'error', ':e': str(e)})
+        except: pass
+        raise
 
 
 # --- Get Recommendations ---
@@ -181,18 +248,35 @@ def handle_recommendations(event, context):
         params = event.get('queryStringParameters') or {}
         analysis_id = params.get('analysis_id')
 
-        if analysis_id:
-            result = table.query(KeyConditionExpression=boto3.dynamodb.conditions.Key('PK').eq(f'ANALYSIS#{analysis_id}') & boto3.dynamodb.conditions.Key('SK').begins_with('REC#'))
-        else:
-            # Get latest analysis
+        # If checking status of an analysis
+        if not analysis_id:
             docs = table.query(KeyConditionExpression=boto3.dynamodb.conditions.Key('PK').eq('DOC'), ScanIndexForward=False)
             analyzed = [d for d in docs['Items'] if d.get('analysis_id')]
             if not analyzed:
                 return resp(200, {'recommendations': []})
-            aid = analyzed[-1]['analysis_id']
-            result = table.query(KeyConditionExpression=boto3.dynamodb.conditions.Key('PK').eq(f'ANALYSIS#{aid}') & boto3.dynamodb.conditions.Key('SK').begins_with('REC#'))
+            doc = analyzed[-1]
+            analysis_id = doc['analysis_id']
+        else:
+            # Find the doc for this analysis
+            docs = table.query(KeyConditionExpression=boto3.dynamodb.conditions.Key('PK').eq('DOC'))
+            doc = next((d for d in docs['Items'] if d.get('analysis_id') == analysis_id), {})
 
-        return resp(200, {'recommendations': result['Items']})
+        status = doc.get('status', 'unknown')
+        if status == 'processing':
+            return resp(200, {'status': 'processing', 'analysis_id': analysis_id})
+        if status == 'error':
+            return resp(200, {'status': 'error', 'error': doc.get('error', 'Analysis failed'), 'analysis_id': analysis_id})
+
+        result = table.query(KeyConditionExpression=boto3.dynamodb.conditions.Key('PK').eq(f'ANALYSIS#{analysis_id}') & boto3.dynamodb.conditions.Key('SK').begins_with('REC#'))
+        recs = result['Items']
+        # Parse JSON fields back
+        for r in recs:
+            for k in ('what_if', 'spend_change'):
+                if isinstance(r.get(k), str):
+                    try: r[k] = json.loads(r[k])
+                    except: pass
+
+        return resp(200, {'status': 'complete', 'analysis_id': analysis_id, 'recommendations': recs})
     except Exception as e:
         return resp(500, {'error': str(e)})
 

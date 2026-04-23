@@ -37,7 +37,7 @@ aws cloudformation package \
   --template-file "$DIR/template.yaml" \
   --s3-bucket "$BUCKET" \
   --output-template-file "$DIR/.packaged.yaml" \
-  --region "$REGION" --quiet
+  --region "$REGION"
 
 aws cloudformation deploy \
   --template-file "$DIR/.packaged.yaml" \
@@ -60,7 +60,7 @@ green "  Frontend: $FRONTEND"
 
 # ── 2. Upload frontend ──────────────────────────────────────
 step "2/7  Uploading frontend"
-aws s3 cp "$DIR/frontend/index.html" "s3://$FB/index.html" --content-type "text/html" --region "$REGION" --quiet
+aws s3 cp "$DIR/frontend/index.html" "s3://$FB/index.html" --content-type "text/html" --region "$REGION"
 aws cloudfront create-invalidation --distribution-id "$DIST" --paths "/*" --region "$REGION" > /dev/null 2>&1 || true
 green "  ✅ Frontend deployed"
 
