@@ -73,6 +73,18 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
 /* Attestations */
 .att-card{border:1px solid #e0e0e0;border-radius:8px;padding:16px;margin-bottom:12px}
+
+/* Credit tracking */
+.credit-card{border:1px solid #e0e0e0;border-radius:8px;padding:14px;margin-bottom:10px}
+.credit-card.qualified{border-left:4px solid #28a745}
+.credit-card.partially_qualified{border-left:4px solid #ffc107}
+.credit-card.not_qualified{border-left:4px solid #dc3545}
+.progress-bar{background:#e9ecef;border-radius:4px;height:8px;margin:8px 0 4px;overflow:hidden}
+.progress-bar .fill{height:100%;border-radius:4px;transition:width .5s}
+.progress-bar .fill.green{background:#28a745}
+.progress-bar .fill.yellow{background:#ffc107}
+.progress-bar .fill.red{background:#dc3545}
+.progress-bar .fill.blue{background:#17a2b8}
 .att-card.pending{border-left:4px solid #ffc107}
 .att-card.in_progress{border-left:4px solid #17a2b8}
 .att-card.completed{border-left:4px solid #28a745;opacity:.7}
@@ -190,19 +202,31 @@ canvas{max-height:280px}
 
   <!-- TAB: Overview -->
   <div class="tab-content active" id="tab-overview">
+    <!-- Commitment Summary Bar -->
+    <div class="card" id="commitmentBar" style="display:none">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+        <div><strong id="csContract">—</strong><br><span style="font-size:.8em;color:#666" id="csDates"></span></div>
+        <div style="text-align:center"><div style="font-size:1.4em;font-weight:700;color:#232F3E" id="csTotal">—</div><div style="font-size:.8em;color:#666">Total Commitment</div></div>
+        <div style="text-align:center"><div style="font-size:1.4em;font-weight:700;color:#FF9900" id="csDiscount">—</div><div style="font-size:.8em;color:#666">Discount Rate</div></div>
+        <div style="text-align:center"><div style="font-size:1.4em;font-weight:700" id="csCurrentYear">—</div><div style="font-size:.8em;color:#666">Current Year Min</div></div>
+      </div>
+    </div>
     <div class="grid grid-3">
-      <div class="card metric"><div class="val" id="mSpendYTD">-</div><div class="lbl">YTD Spend</div></div>
-      <div class="card metric"><div class="val" id="mCommitment">$50,000</div><div class="lbl">Annual Commitment</div></div>
+      <div class="card metric"><div class="val" id="mSpendYTD">-</div><div class="lbl">YTD Spend (Amortized)</div></div>
+      <div class="card metric"><div class="val" id="mCommitment">-</div><div class="lbl">Annual Commitment</div></div>
       <div class="card metric"><div class="val" id="mProgress">-</div><div class="lbl">Progress to Goal</div></div>
-      <div class="card metric"><div class="val" id="mMonthlyTarget">$4,167</div><div class="lbl">Monthly Target</div></div>
-      <div class="card metric"><div class="val" id="mRecs">0</div><div class="lbl">Recommendations</div></div>
-      <div class="card metric"><div class="val" id="mSavings">$0</div><div class="lbl">Potential Savings</div></div>
+      <div class="card metric"><div class="val" id="mRecs">0</div><div class="lbl">Credit Programs</div></div>
+      <div class="card metric"><div class="val" id="mSavings">$0</div><div class="lbl">Max Credits Available</div></div>
+      <div class="card metric"><div class="val" id="mQualified">0</div><div class="lbl">Qualified</div></div>
     </div>
     <div class="grid grid-2">
       <div class="card"><h3 class="section-title">📊 Spend vs Commitment</h3><canvas id="spendChart"></canvas><div id="spendChartEmpty" class="empty">Loading...</div></div>
-      <div class="card"><h3 class="section-title">📊 Savings by Credit Type</h3><canvas id="savingsChart"></canvas><div id="savingsChartEmpty" class="empty">Analyze a document first</div></div>
+      <div class="card"><h3 class="section-title">📊 Credit Value by Program</h3><canvas id="savingsChart"></canvas><div id="savingsChartEmpty" class="empty">Analyze a document first</div></div>
     </div>
-    <div class="card"><h3 class="section-title">🔗 Credit Coupling Analysis <small style="color:#666;font-weight:normal">(live)</small></h3><div id="couplingList"><div class="empty">Loading...</div></div></div>
+    <!-- Credit Tracking -->
+    <div class="card"><h3 class="section-title">💰 Credit Program Tracking</h3><div id="creditTrackingList"><div class="empty">Analyze a PPA/EDP document to see credit programs</div></div></div>
+    <!-- Coupling -->
+    <div class="card"><h3 class="section-title">🔗 Service-to-Credit Mapping <small style="color:#666;font-weight:normal">(live spend)</small></h3><div id="couplingList"><div class="empty">Loading...</div></div></div>
   </div>
 
   <!-- TAB: Recommendations -->
@@ -255,7 +279,6 @@ canvas{max-height:280px}
 <!-- JS will be inserted below -->
 <script>
 // === Config & State ===
-const ANNUAL_COMMITMENT = 50000, MONTHLY_TARGET = Math.round(ANNUAL_COMMITMENT/12);
 const TEAMS = {
   operations:['ops-team@company.com','operations-manager@company.com'],
   management:['ceo@company.com','cto@company.com','cfo@company.com'],
@@ -267,7 +290,7 @@ const TEAMS = {
 let API = localStorage.getItem('CIP_API_URL') || '';
 if (!API) { const u = prompt('Enter your API Gateway URL:'); if(u){localStorage.setItem('CIP_API_URL',u.replace(/\/$/,''));location.reload();}}
 
-let currentRecs=[], currentAttestations=[], currentAnalysisId=null, spendData=null, spendChart=null, savingsChart=null;
+let currentRecs=[], currentAttestations=[], currentAnalysisId=null, commitmentSummary=null, spendData=null, spendChart=null, savingsChart=null;
 let uploadedDocId=null, uploadedS3Key=null, uploadedFileName=null;
 let setupTeams=new Set(), setupEmails='';
 
@@ -370,6 +393,7 @@ async function doAnalyze(){
     const pdata=await poll.json();
     if(pdata.status==='complete'){
       currentRecs=pdata.recommendations;
+      commitmentSummary=pdata.commitment_summary||null;
       // Load attestations too
       try{const ar=await fetch(`${API}/attestations?analysis_id=${currentAnalysisId}`);const ad=await ar.json();currentAttestations=ad.attestations||[];}catch(e){}
       localStorage.setItem('CIP_SETUP',JSON.stringify({teams:[...setupTeams],emails:setupEmails,fileName:uploadedFileName,analysisId:currentAnalysisId}));
@@ -383,8 +407,8 @@ async function doAnalyze(){
 function showDashboard(){
   document.getElementById('setupPage').style.display='none';
   document.getElementById('dashboardPage').style.display='';
-  renderRecs();updateRecMetrics();updateSavingsChart();loadSpend();loadHistory();renderAttestations();
-  toast(`${currentRecs.length} recommendations, ${currentAttestations.length} attestations`);
+  renderRecs();updateRecMetrics();updateSavingsChart();renderCreditTracking();renderCommitmentSummary();loadSpend();loadHistory();renderAttestations();
+  toast(`${currentRecs.length} credit programs, ${currentAttestations.length} attestations`);
 }
 
 // === Tabs ===
@@ -402,23 +426,28 @@ async function loadSpend(){
   try{
     const res=await fetch(`${API}/spend`);spendData=await res.json();
     if(spendData.error){document.getElementById('spendChartEmpty').textContent=spendData.error;return;}
-    const ytd=spendData.total_spend_ytd,pct=((ytd/ANNUAL_COMMITMENT)*100).toFixed(1);
+    const ytd=spendData.total_spend_ytd;
+    // Use commitment from PPA analysis or fallback
+    const annualCommit=commitmentSummary?.years?.[0]?.minimum_commitment||commitmentSummary?.total_commitment||50000;
+    const pct=((ytd/annualCommit)*100).toFixed(1);
     document.getElementById('mSpendYTD').textContent='$'+ytd.toLocaleString();
+    document.getElementById('mCommitment').textContent='$'+Number(annualCommit).toLocaleString();
     document.getElementById('mProgress').textContent=pct+'%';
     document.getElementById('mProgress').className='val '+(parseFloat(pct)>50?'good':'warn');
-    renderSpendChart();renderCouplings();
+    renderSpendChart(annualCommit);renderCouplings();
   }catch(e){document.getElementById('spendChartEmpty').textContent='Failed to load';}
 }
 
-function renderSpendChart(){
+function renderSpendChart(annualCommit){
   if(!spendData?.months?.length)return;
   document.getElementById('spendChartEmpty').style.display='none';
   if(spendChart)spendChart.destroy();
+  const monthlyTarget=Math.round(annualCommit/12);
   spendChart=new Chart(document.getElementById('spendChart'),{
     type:'line',
     data:{labels:spendData.months.map(m=>m.period),datasets:[
-      {label:'Actual Spend',data:spendData.months.map(m=>m.spend),borderColor:'#FF9900',backgroundColor:'rgba(255,153,0,.1)',fill:true,tension:.3},
-      {label:'Monthly Target',data:spendData.months.map(()=>MONTHLY_TARGET),borderColor:'#28a745',borderDash:[5,5],pointRadius:0}
+      {label:'Actual Spend (Amortized)',data:spendData.months.map(m=>m.spend),borderColor:'#FF9900',backgroundColor:'rgba(255,153,0,.1)',fill:true,tension:.3},
+      {label:'Monthly Target',data:spendData.months.map(()=>monthlyTarget),borderColor:'#28a745',borderDash:[5,5],pointRadius:0}
     ]},
     options:{responsive:true,scales:{y:{beginAtZero:true,ticks:{callback:v=>'$'+v.toLocaleString()}}},plugins:{legend:{position:'top'}}}
   });
@@ -443,13 +472,13 @@ function renderCouplings(){
 
 function updateSavingsChart(){
   const groups={};
-  currentRecs.forEach(r=>{groups[r.credit_type]=(groups[r.credit_type]||0)+Number(r.potential_savings||0);});
+  currentRecs.forEach(r=>{groups[r.credit_type]=(groups[r.credit_type]||0)+Number(r.max_credit_value||r.potential_savings||0);});
   const labels=Object.keys(groups);
   if(!labels.length){document.getElementById('savingsChartEmpty').style.display='block';return;}
   document.getElementById('savingsChartEmpty').style.display='none';
   if(savingsChart)savingsChart.destroy();
   savingsChart=new Chart(document.getElementById('savingsChart'),{
-    type:'bar',data:{labels,datasets:[{label:'Annual Savings ($)',data:Object.values(groups),backgroundColor:['#FF9900','#28a745','#17a2b8','#dc3545','#6f42c1','#fd7e14']}]},
+    type:'bar',data:{labels,datasets:[{label:'Max Credit Value ($)',data:Object.values(groups),backgroundColor:['#FF9900','#28a745','#17a2b8','#dc3545','#6f42c1','#fd7e14','#20c997','#e83e8c']}]},
     options:{responsive:true,scales:{y:{beginAtZero:true,ticks:{callback:v=>'$'+v.toLocaleString()}}},plugins:{legend:{display:false}}}
   });
 }
@@ -495,9 +524,12 @@ async function decide(idx,action){
 }
 
 function updateRecMetrics(){
-  const savings=currentRecs.reduce((s,r)=>s+Number(r.potential_savings||0),0);
+  const maxCredits=currentRecs.reduce((s,r)=>s+Number(r.max_credit_value||r.potential_savings||0),0);
+  const qualified=currentRecs.filter(r=>r.qualification==='qualified').length;
   document.getElementById('mRecs').textContent=currentRecs.length;
-  document.getElementById('mSavings').textContent='$'+savings.toLocaleString();
+  document.getElementById('mSavings').textContent='$'+maxCredits.toLocaleString();
+  document.getElementById('mQualified').textContent=qualified+'/'+currentRecs.length;
+  document.getElementById('mQualified').className='val '+(qualified>0?'good':'warn');
 }
 
 // === Email ===
@@ -539,6 +571,45 @@ async function loadHistory(){
         <span class="${h.action==='accepted'?'hist-accepted':'hist-rejected'}">${h.action?.toUpperCase()}</span>
       </div>`).join('');
   }catch(e){}
+}
+
+// === Commitment Summary & Credit Tracking ===
+function renderCommitmentSummary(){
+  if(!commitmentSummary){document.getElementById('commitmentBar').style.display='none';return;}
+  const cs=commitmentSummary;
+  document.getElementById('commitmentBar').style.display='';
+  document.getElementById('csContract').textContent=`${cs.contract_start||'—'} to ${cs.contract_end||'—'}`;
+  document.getElementById('csDates').textContent=cs.years?.length?cs.years.length+'-year contract':'';
+  document.getElementById('csTotal').textContent='$'+Number(cs.total_commitment||0).toLocaleString();
+  document.getElementById('csDiscount').textContent=cs.discount_rate?(cs.discount_rate*100).toFixed(0)+'%':'—';
+  const cy=cs.years?.[0];
+  document.getElementById('csCurrentYear').textContent=cy?'$'+Number(cy.minimum_commitment||0).toLocaleString():'—';
+}
+
+function renderCreditTracking(){
+  const el=document.getElementById('creditTrackingList');
+  if(!currentRecs.length){el.innerHTML='<div class="empty">Analyze a PPA/EDP document to see credit programs</div>';return;}
+  el.innerHTML=currentRecs.map(r=>{
+    const max=Number(r.max_credit_value||r.potential_savings||0);
+    const progress=Number(r.current_progress||0);
+    const pct=max>0?Math.min((progress/max)*100,100):0;
+    const q=r.qualification||'not_qualified';
+    const barColor=q==='qualified'?'green':q==='partially_qualified'?'yellow':'red';
+    const icon=q==='qualified'?'✅':q==='partially_qualified'?'⚠️':'❌';
+    return `<div class="credit-card ${q}">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div><strong>${icon} ${r.title||r.credit_type}</strong><br><span style="font-size:.8em;color:#666">${r.credit_type} · ${r.attestation_window||''}</span></div>
+        <div style="text-align:right"><span style="font-size:1.1em;font-weight:700;color:#FF9900">$${max.toLocaleString()}</span><br><span style="font-size:.8em;color:#666">max credit</span></div>
+      </div>
+      <div class="progress-bar"><div class="fill ${barColor}" style="width:${pct}%"></div></div>
+      <div style="display:flex;justify-content:space-between;font-size:.8em;color:#666">
+        <span>$${progress.toLocaleString()} current</span>
+        <span>${pct.toFixed(1)}%</span>
+        <span>$${max.toLocaleString()} target</span>
+      </div>
+      ${r.what_if?`<div style="font-size:.8em;color:#17a2b8;margin-top:6px">💡 ${r.what_if.scenario||''}</div>`:''}
+    </div>`;
+  }).join('');
 }
 
 // === Attestations ===
@@ -644,7 +715,9 @@ async function emailAttestation(idx){
         fetch(`${API}/recommendations?analysis_id=${cfg.analysisId}`)
           .then(r=>r.json()).then(d=>{
             if(d.recommendations?.length){
-              currentRecs=d.recommendations;showDashboard();
+              currentRecs=d.recommendations;
+              commitmentSummary=d.commitment_summary||null;
+              showDashboard();
             }
           }).catch(()=>{});
         fetch(`${API}/attestations?analysis_id=${cfg.analysisId}`)
