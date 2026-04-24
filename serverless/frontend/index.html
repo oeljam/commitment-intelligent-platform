@@ -457,7 +457,7 @@ async function loadSpend(){
     document.getElementById('mCommitment').textContent='$'+Number(annualCommit).toLocaleString();
     document.getElementById('mProgress').textContent=pct+'%';
     document.getElementById('mProgress').className='val '+(parseFloat(pct)>50?'good':'warn');
-    renderSpendChart(annualCommit);renderCouplings();
+    renderSpendChart(annualCommit);try{renderCouplings();}catch(e){}
   }catch(e){document.getElementById('spendChartEmpty').textContent='Failed to load';}
 }
 
@@ -621,7 +621,7 @@ function renderCommitmentSummary(){
 
 function renderCreditTracking(){
   const el=document.getElementById('creditTrackingList');
-  if(!currentRecs.length){el.innerHTML='<div class="empty">Analyze a PPA/EDP document to see credit programs</div>';return;}
+  if(!el||!currentRecs.length)return;
   el.innerHTML=currentRecs.filter(r=>r.what_if||r.attestation_window).map(r=>{
     const q=r.qualification||'not_qualified';
     const icon=q==='qualified'?'✅':q==='partially_qualified'?'⚠️':'❌';
@@ -757,12 +757,10 @@ async function emailAttestation(idx){
         // Load recommendations from API
         fetch(`${API}/recommendations?analysis_id=${cfg.analysisId}`)
           .then(r=>r.json()).then(d=>{
-            if(d.recommendations?.length){
-              currentRecs=d.recommendations;
-              commitmentSummary=d.commitment_summary||null;
-              showDashboard();
-            }
-          }).catch(()=>{});
+            currentRecs=d.recommendations||[];
+            commitmentSummary=d.commitment_summary||null;
+            showDashboard();
+          }).catch(()=>showDashboard());
         fetch(`${API}/attestations?analysis_id=${cfg.analysisId}`)
           .then(r=>r.json()).then(d=>{currentAttestations=d.attestations||[];renderAttestations();}).catch(()=>{});
         return;
