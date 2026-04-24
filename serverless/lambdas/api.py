@@ -47,14 +47,17 @@ def _get_spend_summary():
         year_start = f'{now.year}-01-01'
         today = now.strftime('%Y-%m-%d')
 
-        ytd = ce.get_cost_and_usage(TimePeriod={'Start': year_start, 'End': today}, Granularity='MONTHLY', Metrics=['BlendedCost'])
-        total = sum(float(r['Total']['BlendedCost']['Amount']) for r in ytd['ResultsByTime'])
+        # Exclude tax, credits, refunds — use amortized cost (matches real PPA tracking)
+        ce_filter = {'Not': {'Dimensions': {'Key': 'RECORD_TYPE', 'Values': ['Credit', 'Refund', 'Tax']}}}
 
-        by_svc = ce.get_cost_and_usage(TimePeriod={'Start': month_start, 'End': today}, Granularity='MONTHLY', Metrics=['BlendedCost'], GroupBy=[{'Type': 'DIMENSION', 'Key': 'SERVICE'}])
+        ytd = ce.get_cost_and_usage(TimePeriod={'Start': year_start, 'End': today}, Granularity='MONTHLY', Metrics=['AmortizedCost'], Filter=ce_filter)
+        total = sum(float(r['Total']['AmortizedCost']['Amount']) for r in ytd['ResultsByTime'])
+
+        by_svc = ce.get_cost_and_usage(TimePeriod={'Start': month_start, 'End': today}, Granularity='MONTHLY', Metrics=['AmortizedCost'], Filter=ce_filter, GroupBy=[{'Type': 'DIMENSION', 'Key': 'SERVICE'}])
         services = {}
         for r in by_svc['ResultsByTime']:
             for g in r['Groups']:
-                cost = float(g['Metrics']['BlendedCost']['Amount'])
+                cost = float(g['Metrics']['AmortizedCost']['Amount'])
                 if cost > 0.01:
                     services[g['Keys'][0]] = round(cost, 2)
 
@@ -147,41 +150,70 @@ def handle_analyze_worker(event, context):
 PAST USER DECISIONS (learn from these — prioritize credit types the user accepted, deprioritize rejected ones):
 {chr(10).join(decisions)}"""
 
-        prompt = f"""You are an AWS commitment optimization expert. Analyze the attached PPA/EDP document AND the customer's live AWS spend data below. Cross-reference the credit programs in the PPA against actual service usage to determine qualification.{history_ctx}
+        prompt = f"""You are an AWS PPA/EDP commitment tracking expert. Analyze the attached PPA/EDP document AND the customer's live AWS spend data.
 
-Think through scenarios: if the customer increased or shifted spend on certain services, would they unlock new credit programs or move from partially_qualified to qualified? Include these what-if scenarios as part of each recommendation.
+The spend data uses amortized cost, excluding tax/credits/refunds. Marketplace purchases are included.{history_ctx}
 
 LIVE AWS SPEND DATA:
 - YTD Spend: ${spend['ytd_spend']}
-- Current month spend by service: {json.dumps(spend['current_month_by_service'], indent=2)}
+- Current month by service: {json.dumps(spend['current_month_by_service'], indent=2)}
 
-Return a JSON object with two keys: "recommendations" and "attestations".
+Analyze the PPA document for these real-world PPA structures:
 
-"recommendations" — a JSON array where each item has:
+1. CREDIT BUCKETS — PPA/EDP agreements typically have outcome-based credit programs such as:
+   - GenAI POC/Adoption credits (Bedrock, SageMaker, GPU usage)
+   - Growth Investment credits (tiered spend thresholds per contract year)
+   - Graviton Adoption credits (% of EC2 on Graviton instances)
+   - Serverless Innovation/Modernization credits (regional deployments)
+   - New Region Expansion credits
+   - Any other credit programs in the document
+
+2. SPENDING COMMITMENTS — Multi-year minimum spend per contract year, with calculation methods (fixed, % of prior year actual)
+
+3. GOVERNANCE — Attestation requirements, compliance deadlines, case studies, executive engagements
+
+For each credit bucket found, think through what-if scenarios: if the customer shifted or increased spend, would they unlock or improve credit qualification?
+
+Return a JSON object with three keys: "recommendations", "attestations", and "commitment_summary".
+
+"recommendations" — array, one per credit bucket or opportunity found. Each has:
 - id: unique string
-- title: short descriptive title
-- workload: the AWS workload this covers
-- usage_pattern: what you observe in the live spend data for this workload
-- qualification: "qualified", "partially_qualified", or "not_qualified" (based on ACTUAL spend, not just the PPA)
-- credit_type: type of AWS credit (e.g. "Graviton", "Savings Plan", "Serverless", "Security")
-- potential_savings: estimated annual savings as a number based on actual spend
+- title: credit program name
+- credit_type: category (e.g. "GenAI POC", "GenAI Adoption", "Growth Investment", "Graviton Adoption", "Serverless", "New Region", "Savings Plan", "Security")
+- workload: AWS services involved
+- usage_pattern: what the live spend data shows for relevant services
+- qualification: "qualified", "partially_qualified", or "not_qualified"
+- max_credit_value: maximum credit amount available (number, from the PPA)
+- current_progress: estimated current progress toward qualification (number, dollar amount)
+- attestation_window: start and end dates for claiming this credit (e.g. "Mar 2025 - Mar 2028")
+- potential_savings: estimated credit value achievable based on current trajectory (number)
 - confidence: "high", "medium", or "low"
-- reasoning: 2-3 sentences explaining how the live spend data supports or contradicts qualification
-- what_if: an object describing a scenario that would improve or unlock this credit, with:
-    - scenario: one sentence describing the change (e.g. "Migrate EC2 instances to Graviton t4g family")
-    - spend_change: object mapping service names to new monthly spend amounts (e.g. {{"Amazon EC2 - Graviton": 60}})
-    - new_qualification: what the qualification would become ("qualified" or "partially_qualified")
-    - new_savings: estimated annual savings after the change
-    - effort: "low", "medium", or "high" — how hard is this change to implement
+- reasoning: 2-3 sentences cross-referencing live spend against PPA requirements
+- what_if: object with:
+    - scenario: one sentence describing the change
+    - spend_change: object mapping service names to new monthly spend amounts
+    - new_qualification: resulting qualification status
+    - new_savings: estimated credit value after the change
+    - effort: "low", "medium", or "high"
 
-"attestations" — a JSON array of attestation/compliance requirements found in the PPA. Each item has:
+"attestations" — array of governance/compliance requirements. Each has:
 - id: unique string
-- name: attestation name (e.g. "Spend Commitment Review", "Graviton Migration Progress")
-- frequency: how often it's due (e.g. "Quarterly", "Monthly", "Semi-Annual", "Annual")
-- next_due: next due date as YYYY-MM-DD
-- owner: responsible team/role (e.g. "Finance", "Engineering", "FinOps")
+- name: requirement name
+- category: "governance" or "credit_attestation"
+- frequency: "Monthly", "Quarterly", "Semi-Annual", "Annual", or "During Term"
+- next_due: next due date as YYYY-MM-DD (best estimate)
+- owner: responsible party
+- consequence: what happens if not met
 - description: what needs to be submitted
-- fields: array of field objects, each with "label" (string) and "type" ("text", "number", "date", "select")
+- fields: array of field objects with "label" (string) and "type" ("text", "number", "date", "select")
+
+"commitment_summary" — object with:
+- contract_start: start date YYYY-MM-DD
+- contract_end: end date YYYY-MM-DD
+- total_commitment: total minimum over full term (number)
+- years: array of objects, each with "year" (number), "label" (e.g. "Year 1"), "start" (YYYY-MM-DD), "end" (YYYY-MM-DD), "minimum_commitment" (number), "calculation_method" (string)
+- discount_rate: primary discount percentage (number, e.g. 0.25)
+- adjusted_discount_rate: reduced rate if requirements not met (number or null)
 
 Return ONLY the JSON object, no other text."""
 
@@ -211,10 +243,11 @@ Return ONLY the JSON object, no other text."""
 
         # Support both old (array) and new (object) response formats
         if isinstance(parsed, list):
-            recommendations, attestations = parsed, []
+            recommendations, attestations, commitment_summary = parsed, [], {}
         else:
             recommendations = parsed.get('recommendations', [])
             attestations = parsed.get('attestations', [])
+            commitment_summary = parsed.get('commitment_summary', {})
 
         # Store in DynamoDB
         now = datetime.utcnow().isoformat()
@@ -238,6 +271,14 @@ Return ONLY the JSON object, no other text."""
                 'PK': f'ATTESTATION#{analysis_id}', 'SK': f'ATT#{att_id}',
                 'doc_id': doc_id, 'status': 'pending', 'created_at': now,
                 **{k: json.dumps(v) if isinstance(v, (list, dict)) else str(v) if isinstance(v, (int, float)) else v for k, v in att.items()}
+            })
+
+        # Store commitment summary
+        if commitment_summary:
+            table.put_item(Item={
+                'PK': f'ANALYSIS#{analysis_id}', 'SK': 'COMMITMENT_SUMMARY',
+                'doc_id': doc_id, 'created_at': now,
+                'data': json.dumps(commitment_summary)
             })
 
         # Update doc status
@@ -286,7 +327,15 @@ def handle_recommendations(event, context):
                     try: r[k] = json.loads(r[k])
                     except: pass
 
-        return resp(200, {'status': 'complete', 'analysis_id': analysis_id, 'recommendations': recs})
+        # Get commitment summary if available
+        commitment = {}
+        try:
+            cs = table.get_item(Key={'PK': f'ANALYSIS#{analysis_id}', 'SK': 'COMMITMENT_SUMMARY'})
+            if 'Item' in cs:
+                commitment = json.loads(cs['Item'].get('data', '{}'))
+        except: pass
+
+        return resp(200, {'status': 'complete', 'analysis_id': analysis_id, 'recommendations': recs, 'commitment_summary': commitment})
     except Exception as e:
         return resp(500, {'error': str(e)})
 
@@ -467,24 +516,27 @@ def handle_spend(event, context):
         today = now.strftime('%Y-%m-%d')
         month_start = f'{now.year}-{now.month:02d}-01'
 
+        # Exclude tax, credits, refunds — amortized cost (PPA standard)
+        ce_filter = {'Not': {'Dimensions': {'Key': 'RECORD_TYPE', 'Values': ['Credit', 'Refund', 'Tax']}}}
+
         # Monthly spend breakdown for the year
         monthly = ce.get_cost_and_usage(
             TimePeriod={'Start': year_start, 'End': today},
-            Granularity='MONTHLY', Metrics=['BlendedCost']
+            Granularity='MONTHLY', Metrics=['AmortizedCost'], Filter=ce_filter
         )
-        months = [{'period': r['TimePeriod']['Start'][:7], 'spend': float(r['Total']['BlendedCost']['Amount'])} for r in monthly['ResultsByTime']]
+        months = [{'period': r['TimePeriod']['Start'][:7], 'spend': float(r['Total']['AmortizedCost']['Amount'])} for r in monthly['ResultsByTime']]
         total_spend = sum(m['spend'] for m in months)
 
         # Spend by service (current month)
         by_service = ce.get_cost_and_usage(
             TimePeriod={'Start': month_start, 'End': today},
-            Granularity='MONTHLY', Metrics=['BlendedCost'],
+            Granularity='MONTHLY', Metrics=['AmortizedCost'], Filter=ce_filter,
             GroupBy=[{'Type': 'DIMENSION', 'Key': 'SERVICE'}]
         )
         services = {}
         for r in by_service['ResultsByTime']:
             for g in r['Groups']:
-                cost = float(g['Metrics']['BlendedCost']['Amount'])
+                cost = float(g['Metrics']['AmortizedCost']['Amount'])
                 if cost > 0.01:
                     services[g['Keys'][0]] = round(cost, 2)
 
