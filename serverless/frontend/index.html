@@ -12,9 +12,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .container{max-width:1200px;margin:0 auto;padding:20px}
 .card{background:#fff;border-radius:8px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.1);margin-bottom:16px}
 .grid{display:grid;gap:16px;margin-bottom:16px}
-.grid-3{grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
+.grid-3{grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
 .grid-2{grid-template-columns:1fr 1fr}
-.metric .val{font-size:1.8em;font-weight:700;color:#232F3E}
+.metric .val{font-size:1.4em;font-weight:700;color:#232F3E;word-break:break-word}
 .metric .lbl{color:#666;font-size:.85em;margin-top:4px}
 .metric .val.warn{color:#ffc107}.metric .val.good{color:#28a745}
 .btn{padding:8px 16px;border:none;border-radius:4px;cursor:pointer;font-size:.9em;font-weight:500;transition:.2s;display:inline-flex;align-items:center;gap:6px}
@@ -442,12 +442,18 @@ function renderSpendChart(annualCommit){
   if(!spendData?.months?.length)return;
   document.getElementById('spendChartEmpty').style.display='none';
   if(spendChart)spendChart.destroy();
-  const monthlyTarget=Math.round(annualCommit/12);
+  const n=spendData.months.length;
+  const monthlyTarget=annualCommit/12;
+  // Cumulative actual spend
+  let cumActual=0;
+  const cumData=spendData.months.map(m=>{cumActual+=m.spend;return Math.round(cumActual);});
+  // Cumulative target: where you need to be by each month
+  const cumTarget=spendData.months.map((_,i)=>Math.round(monthlyTarget*(i+1)));
   spendChart=new Chart(document.getElementById('spendChart'),{
     type:'line',
     data:{labels:spendData.months.map(m=>m.period),datasets:[
-      {label:'Actual Spend (Amortized)',data:spendData.months.map(m=>m.spend),borderColor:'#FF9900',backgroundColor:'rgba(255,153,0,.1)',fill:true,tension:.3},
-      {label:'Monthly Target',data:spendData.months.map(()=>monthlyTarget),borderColor:'#28a745',borderDash:[5,5],pointRadius:0}
+      {label:'Cumulative Spend',data:cumData,borderColor:'#FF9900',backgroundColor:'rgba(255,153,0,.1)',fill:true,tension:.3},
+      {label:'Cumulative Target',data:cumTarget,borderColor:'#28a745',borderDash:[5,5],pointRadius:0}
     ]},
     options:{responsive:true,scales:{y:{beginAtZero:true,ticks:{callback:v=>'$'+v.toLocaleString()}}},plugins:{legend:{position:'top'}}}
   });
@@ -471,15 +477,19 @@ function renderCouplings(){
 }
 
 function updateSavingsChart(){
-  const groups={};
-  currentRecs.forEach(r=>{groups[r.credit_type]=(groups[r.credit_type]||0)+Number(r.max_credit_value||r.potential_savings||0);});
-  const labels=Object.keys(groups);
-  if(!labels.length){document.getElementById('savingsChartEmpty').style.display='block';return;}
+  if(!currentRecs.length){document.getElementById('savingsChartEmpty').style.display='block';return;}
   document.getElementById('savingsChartEmpty').style.display='none';
   if(savingsChart)savingsChart.destroy();
+  const labels=currentRecs.map(r=>r.credit_type||r.title||'');
+  const maxVals=currentRecs.map(r=>Number(r.max_credit_value||r.potential_savings||0));
+  const progressVals=currentRecs.map(r=>Number(r.current_progress||0));
   savingsChart=new Chart(document.getElementById('savingsChart'),{
-    type:'bar',data:{labels,datasets:[{label:'Max Credit Value ($)',data:Object.values(groups),backgroundColor:['#FF9900','#28a745','#17a2b8','#dc3545','#6f42c1','#fd7e14','#20c997','#e83e8c']}]},
-    options:{responsive:true,scales:{y:{beginAtZero:true,ticks:{callback:v=>'$'+v.toLocaleString()}}},plugins:{legend:{display:false}}}
+    type:'bar',
+    data:{labels,datasets:[
+      {label:'Current Progress',data:progressVals,backgroundColor:'#FF9900'},
+      {label:'Max Available',data:maxVals,backgroundColor:'#e0e0e0'}
+    ]},
+    options:{responsive:true,scales:{y:{beginAtZero:true,ticks:{callback:v=>'$'+v.toLocaleString()}}},plugins:{legend:{position:'top'}}}
   });
 }
 // === Recommendations ===
@@ -687,12 +697,17 @@ async function emailAttestation(idx){
     status:a.status||'pending',
     reasoning:`Due: ${a.next_due||'N/A'}. Owner: ${a.owner||'N/A'}. ${a.description||''}\n\nFilled Fields:\n${Object.entries(filled).map(([k,v])=>k+': '+v).join('\n')}`
   };
-  // Gather recipients from setup
-  let recipients=[];
+  // For "Send to AWS" — prompt for AWS team email
+  let awsEmail=localStorage.getItem('CIP_AWS_EMAIL')||'';
+  if(!awsEmail){
+    awsEmail=prompt('Enter the AWS account team email (TAM/Account Manager):');
+    if(awsEmail)localStorage.setItem('CIP_AWS_EMAIL',awsEmail);
+  }
+  if(!awsEmail)return toast('No AWS email provided','error');
+  let recipients=[awsEmail];
+  // Also include setup teams if selected
   setupTeams.forEach(t=>{if(TEAMS[t])recipients.push(...TEAMS[t]);});
   recipients=[...new Set(recipients)];
-  if(!recipients.length)recipients=[prompt('Enter recipient email:')].filter(Boolean);
-  if(!recipients.length)return toast('No recipients','error');
   try{
     await fetch(`${API}/send-email`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({recipients,subject:`Attestation Submission: ${a.name} - Due ${a.next_due||'N/A'}`,recommendation:rec})});
     toast(`Attestation sent to ${recipients.length} recipient(s)`);
