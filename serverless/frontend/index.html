@@ -136,6 +136,7 @@ canvas{max-height:280px}
       <div class="setup-step" id="ss2">2. Email Teams</div>
       <div class="setup-step" id="ss3">3. Analyze</div>
     </div>
+    <div style="text-align:right;margin-bottom:12px"><button class="btn btn-outline btn-sm" onclick="skipToDashboard()">Skip to Dashboard →</button></div>
 
     <!-- Step 1: Upload -->
     <div class="step-content active" id="step1">
@@ -150,7 +151,7 @@ canvas{max-height:280px}
         <strong id="uploadedFileName"></strong> - ready for analysis
       </div>
       <div style="text-align:right;margin-top:16px">
-        <button class="btn btn-primary btn-lg" id="step1Next" onclick="goStep(2)" disabled>Next →</button>
+        <button class="btn btn-primary btn-lg" id="step1Next" onclick="goStep(2)">Next →</button>
       </div>
     </div>
 
@@ -169,6 +170,8 @@ canvas{max-height:280px}
       </div>
       <label style="font-size:.85em;font-weight:600">Custom Recipients</label>
       <textarea class="custom-emails" id="setupCustomEmails" placeholder="Enter email addresses, one per line or comma-separated..."></textarea>
+      <label style="font-size:.85em;font-weight:600;margin-top:12px;display:block">AWS Account Team</label>
+      <input type="text" id="setupAwsEmail" placeholder="TAM / Account Manager email (for attestation submissions)" style="width:100%;padding:10px;border:1px solid #ccc;border-radius:4px;font-family:inherit;margin-top:4px">
       <div style="display:flex;justify-content:space-between;margin-top:16px">
         <button class="btn btn-outline" onclick="goStep(1)">← Back</button>
         <button class="btn btn-primary btn-lg" onclick="goStep(3)">Next →</button>
@@ -215,18 +218,23 @@ canvas{max-height:280px}
       <div class="card metric"><div class="val" id="mSpendYTD">-</div><div class="lbl">YTD Spend (Amortized)</div></div>
       <div class="card metric"><div class="val" id="mCommitment">-</div><div class="lbl">Annual Commitment</div></div>
       <div class="card metric"><div class="val" id="mProgress">-</div><div class="lbl">Progress to Goal</div></div>
+    </div>
+    <div class="grid grid-2">
+      <div class="card" style="cursor:pointer" onclick="switchTab('credits')"><h3 class="section-title">📊 Spend vs Commitment <span style="font-size:.7em;color:#999">▸</span></h3><canvas id="spendChart"></canvas><div id="spendChartEmpty" class="empty">Loading...</div></div>
+      <div class="card" style="cursor:pointer" onclick="switchTab('credits')"><h3 class="section-title">💰 Credit Progress vs Available <span style="font-size:.7em;color:#999">▸ details</span></h3><canvas id="savingsChart"></canvas><div id="savingsChartEmpty" class="empty">Analyze a document first</div></div>
+    </div>
+  </div>
+
+  <!-- TAB: Credit Details (hidden from nav, opened by clicking charts) -->
+  <div class="tab-content" id="tab-credits">
+    <div style="margin-bottom:12px"><button class="btn btn-outline btn-sm" onclick="switchTab('overview')">← Back to Overview</button></div>
+    <div class="grid grid-3" style="margin-bottom:16px">
       <div class="card metric"><div class="val" id="mRecs">0</div><div class="lbl">Credit Programs</div></div>
       <div class="card metric"><div class="val" id="mSavings">$0</div><div class="lbl">Max Credits Available</div></div>
       <div class="card metric"><div class="val" id="mQualified">0</div><div class="lbl">Qualified</div></div>
     </div>
-    <div class="grid grid-2">
-      <div class="card"><h3 class="section-title">📊 Spend vs Commitment</h3><canvas id="spendChart"></canvas><div id="spendChartEmpty" class="empty">Loading...</div></div>
-      <div class="card"><h3 class="section-title">📊 Credit Value by Program</h3><canvas id="savingsChart"></canvas><div id="savingsChartEmpty" class="empty">Analyze a document first</div></div>
-    </div>
-    <!-- Credit Tracking -->
-    <div class="card"><h3 class="section-title">💰 Credit Program Tracking</h3><div id="creditTrackingList"><div class="empty">Analyze a PPA/EDP document to see credit programs</div></div></div>
-    <!-- Coupling -->
     <div class="card"><h3 class="section-title">🔗 Service-to-Credit Mapping <small style="color:#666;font-weight:normal">(live spend)</small></h3><div id="couplingList"><div class="empty">Loading...</div></div></div>
+  </div>
   </div>
 
   <!-- TAB: Recommendations -->
@@ -313,6 +321,8 @@ function toggleSetupTeam(el){const t=el.dataset.team;setupTeams.has(t)?setupTeam
 
 function updateSetupSummary(){
   setupEmails=document.getElementById('setupCustomEmails').value;
+  const awsEmail=document.getElementById('setupAwsEmail').value.trim();
+  if(awsEmail)localStorage.setItem('CIP_AWS_EMAIL',awsEmail);
   const teams=[...setupTeams];
   let allRecipients=[];
   teams.forEach(t=>{if(TEAMS[t])allRecipients.push(...TEAMS[t]);});
@@ -323,6 +333,7 @@ function updateSetupSummary(){
       <p><strong>📄 Document:</strong> ${uploadedFileName||'None'}</p>
       <p><strong>👥 Teams:</strong> ${teams.length?teams.join(', '):'None selected'}</p>
       <p><strong>📧 Recipients:</strong> ${allRecipients.length} email(s)</p>
+      <p><strong>☁️ AWS Team:</strong> ${awsEmail||'Not configured'}</p>
     </div>
     <p style="margin-top:12px">Click <strong>Analyze</strong> to send the PDF to Bedrock AI for commitment and credit analysis.</p>`;
 }
@@ -333,9 +344,18 @@ function resetSetup(){
   goStep(1);
 }
 
+function skipToDashboard(){
+  document.getElementById('setupPage').style.display='none';
+  document.getElementById('dashboardPage').style.display='';
+  loadSpend();loadHistory();
+  if(currentRecs.length){renderRecs();updateRecMetrics();updateSavingsChart();renderCreditTracking();renderCommitmentSummary();renderAttestations();}
+}
+
 // === File Upload ===
 const zone=document.getElementById('uploadZone'),fi=document.getElementById('fileInput');
 zone.onclick=()=>fi.click();
+const savedAwsEmail=localStorage.getItem('CIP_AWS_EMAIL')||'';
+if(savedAwsEmail)document.getElementById('setupAwsEmail').value=savedAwsEmail;
 zone.ondragover=e=>{e.preventDefault();zone.classList.add('dragover');};
 zone.ondragleave=()=>zone.classList.remove('dragover');
 zone.ondrop=e=>{e.preventDefault();zone.classList.remove('dragover');handleSetupFile(e.dataTransfer.files[0]);};
@@ -416,9 +436,12 @@ function switchTab(name){
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
   document.querySelector(`.tab-content#tab-${name}`).classList.add('active');
-  event.target.classList.add('active');
+  // Highlight nav tab (credits maps to overview in nav)
+  const navName=name==='credits'?'overview':name;
+  document.querySelectorAll('.tab').forEach(t=>{if(t.textContent.toLowerCase().includes(navName==='overview'?'overview':navName))t.classList.add('active');});
   if(name==='history')loadHistory();
   if(name==='attestations')loadAttestations();
+  if(name==='credits'){renderCreditTracking();renderCouplings();}
 }
 
 // === Spend (Cost Explorer) ===
@@ -599,27 +622,17 @@ function renderCommitmentSummary(){
 function renderCreditTracking(){
   const el=document.getElementById('creditTrackingList');
   if(!currentRecs.length){el.innerHTML='<div class="empty">Analyze a PPA/EDP document to see credit programs</div>';return;}
-  el.innerHTML=currentRecs.map(r=>{
-    const max=Number(r.max_credit_value||r.potential_savings||0);
-    const progress=Number(r.current_progress||0);
-    const pct=max>0?Math.min((progress/max)*100,100):0;
+  el.innerHTML=currentRecs.filter(r=>r.what_if||r.attestation_window).map(r=>{
     const q=r.qualification||'not_qualified';
-    const barColor=q==='qualified'?'green':q==='partially_qualified'?'yellow':'red';
     const icon=q==='qualified'?'✅':q==='partially_qualified'?'⚠️':'❌';
     return `<div class="credit-card ${q}">
       <div style="display:flex;justify-content:space-between;align-items:center">
-        <div><strong>${icon} ${r.title||r.credit_type}</strong><br><span style="font-size:.8em;color:#666">${r.credit_type} · ${r.attestation_window||''}</span></div>
-        <div style="text-align:right"><span style="font-size:1.1em;font-weight:700;color:#FF9900">$${max.toLocaleString()}</span><br><span style="font-size:.8em;color:#666">max credit</span></div>
+        <strong>${icon} ${r.credit_type||r.title}</strong>
+        ${r.attestation_window?`<span style="font-size:.8em;color:#666">📅 ${r.attestation_window}</span>`:''}
       </div>
-      <div class="progress-bar"><div class="fill ${barColor}" style="width:${pct}%"></div></div>
-      <div style="display:flex;justify-content:space-between;font-size:.8em;color:#666">
-        <span>$${progress.toLocaleString()} current</span>
-        <span>${pct.toFixed(1)}%</span>
-        <span>$${max.toLocaleString()} target</span>
-      </div>
-      ${r.what_if?`<div style="font-size:.8em;color:#17a2b8;margin-top:6px">💡 ${r.what_if.scenario||''}</div>`:''}
+      ${r.what_if?`<div style="font-size:.85em;color:#17a2b8;margin-top:6px">💡 ${r.what_if.scenario||''} → <strong>$${Number(r.what_if.new_savings||0).toLocaleString()}</strong> · Effort: ${r.what_if.effort||'—'}</div>`:''}
     </div>`;
-  }).join('');
+  }).join('')||'<div class="empty">No actionable scenarios found</div>';
 }
 
 // === Attestations ===
@@ -655,19 +668,34 @@ function renderAttestations(){
       <p style="font-size:.85em;color:#555;margin:6px 0">${a.description||''}</p>
       ${status==='completed'?`<div style="color:#28a745;font-weight:600;font-size:.9em">✅ Completed${a.updated_at?' on '+new Date(a.updated_at).toLocaleDateString():''}</div>`:`
       <div class="att-fields" id="att-fields-${i}">
-        ${fields.map((f,fi)=>`<div>
-          <label>${f.label}</label>
-          ${f.type==='select'?`<select data-field="${f.label}"><option value="">Select...</option><option>Yes</option><option>No</option><option>N/A</option></select>`
-          :`<input type="${f.type==='number'?'number':f.type==='date'?'date':'text'}" data-field="${f.label}" placeholder="${f.label}" value="${filled[f.label]||''}">`}
-        </div>`).join('')}
+        ${fields.map((f,fi)=>{
+          const val=filled[f.label]||f.auto_value||'';
+          const isAuto=!filled[f.label]&&f.auto_value;
+          return `<div>
+          <label>${f.label}${isAuto?' <span style="background:#17a2b8;color:#fff;padding:1px 5px;border-radius:3px;font-size:.7em">LIVE</span>':''}</label>
+          ${f.type==='select'?`<select data-field="${f.label}"><option value="">Select...</option><option${val==='Yes'?' selected':''}>Yes</option><option${val==='No'?' selected':''}>No</option><option${val==='N/A'?' selected':''}>N/A</option></select>`
+          :`<input type="${f.type==='number'?'number':f.type==='date'?'date':'text'}" data-field="${f.label}" placeholder="${f.label}" value="${val}"${isAuto?' style="background:#f0faff;border-color:#17a2b8"':''}>`}
+        </div>`}).join('')}
       </div>
       <div style="display:flex;gap:8px;margin-top:8px">
         <button class="btn btn-primary btn-sm" onclick="saveAttestation(${i},'update')">💾 Save</button>
-        <button class="btn btn-accept btn-sm" onclick="saveAttestation(${i},'complete')">✅ Mark Complete</button>
-        <button class="btn btn-outline btn-sm" onclick="emailAttestation(${i})">📧 Send to AWS</button>
+        <button class="btn btn-accept btn-sm" onclick="if(validateAtt(${i}))saveAttestation(${i},'complete')">✅ Mark Complete</button>
+        <button class="btn btn-outline btn-sm" onclick="if(validateAtt(${i}))emailAttestation(${i})">📧 Send to AWS</button>
       </div>`}
     </div>`;
   }).join('');
+}
+
+function validateAtt(idx){
+  const container=document.getElementById('att-fields-'+idx);
+  if(!container)return true;
+  let valid=true;
+  container.querySelectorAll('input,select').forEach(el=>{
+    if(!el.value){el.style.borderColor='#dc3545';valid=false;}
+    else{el.style.borderColor='';}
+  });
+  if(!valid)toast('Please fill all fields before submitting','error');
+  return valid;
 }
 
 async function saveAttestation(idx,action){

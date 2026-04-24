@@ -95,33 +95,34 @@ def _repair_json(text):
     except json.JSONDecodeError:
         pass
     # Try closing open braces/brackets
-    fixed = text.rstrip()
-    # Remove trailing comma
-    fixed = fixed.rstrip(',')
-    # Count open vs close
-    opens = fixed.count('{') - fixed.count('}')
-    open_arr = fixed.count('[') - fixed.count(']')
+    fixed = text.rstrip().rstrip(',')
     # Close any open string
     if fixed.count('"') % 2 == 1:
         fixed += '"'
-    fixed += '}' * max(opens, 0)
+    # Close open structures
+    opens = fixed.count('{') - fixed.count('}')
+    open_arr = fixed.count('[') - fixed.count(']')
     fixed += ']' * max(open_arr, 0)
+    fixed += '}' * max(opens, 0)
     try:
         return json.loads(fixed)
     except json.JSONDecodeError:
         pass
-    # Last resort: find the last complete object in recommendations array
-    try:
-        idx = text.rfind('}')
-        if idx > 0:
-            candidate = text[:idx+1]
-            candidate = candidate.rstrip(',') + ']}'
-            # Ensure attestations key exists
-            if '"attestations"' not in candidate:
-                candidate = candidate.rstrip('}') + ', "attestations": []}'
-            return json.loads(candidate)
-    except json.JSONDecodeError:
-        pass
+    # Progressively trim from the end and try to close
+    for trim in range(1, 200):
+        candidate = text[:-(trim)].rstrip().rstrip(',').rstrip(':')
+        if candidate.count('"') % 2 == 1:
+            candidate += '"'
+        o = candidate.count('{') - candidate.count('}')
+        a = candidate.count('[') - candidate.count(']')
+        candidate += ']' * max(a, 0)
+        candidate += '}' * max(o, 0)
+        try:
+            parsed = json.loads(candidate)
+            if isinstance(parsed, dict):
+                return parsed
+        except json.JSONDecodeError:
+            continue
     raise ValueError(f"Cannot parse Bedrock response (length {len(text)})")
 
 
@@ -205,7 +206,11 @@ Return a JSON object with three keys: "recommendations", "attestations", and "co
 - owner: responsible party
 - consequence: what happens if not met
 - description: what needs to be submitted
-- fields: array of field objects with "label" (string) and "type" ("text", "number", "date", "select")
+- fields: array of field objects with "label" (string), "type" ("text", "number", "date", "select"), and optionally "auto_source" — a hint for auto-populating from live data. Use these values when applicable:
+    - "ce_ytd_spend" for YTD total spend
+    - "ce_service:SERVICE_NAME" for a specific service spend (e.g. "ce_service:Amazon EC2")
+    - "ce_service_count" for number of active services
+    - null if the field must be manually filled
 
 "commitment_summary" — object with:
 - contract_start: start date YYYY-MM-DD
@@ -219,7 +224,7 @@ Return ONLY the JSON object, no other text."""
 
         bedrock_body = json.dumps({
             "anthropic_version": "bedrock-2023-05-31",
-            "max_tokens": 8192,
+            "max_tokens": 16384,
             "messages": [
                 {"role": "user", "content": [
                     {"type": "document", "source": {"type": "base64", "media_type": "application/pdf", "data": pdf_b64}},
@@ -288,7 +293,8 @@ Return ONLY the JSON object, no other text."""
     except Exception as e:
         # Mark doc as failed
         try:
-            table.update_item(Key={'PK': 'DOC', 'SK': event.get('doc_id','')}, UpdateExpression='SET #s = :s, #e = :e', ExpressionAttributeNames={'#s': 'status', '#e': 'error'}, ExpressionAttributeValues={':s': 'error', ':e': str(e)})
+            if event.get('doc_id'):
+                table.update_item(Key={'PK': 'DOC', 'SK': event['doc_id']}, UpdateExpression='SET #s = :s, #e = :e', ExpressionAttributeNames={'#s': 'status', '#e': 'error'}, ExpressionAttributeValues={':s': 'error', ':e': str(e)[:500]})
         except: pass
         raise
 
@@ -424,7 +430,6 @@ def handle_attestations(event, context):
         if method == 'GET':
             analysis_id = params.get('analysis_id')
             if not analysis_id:
-                # Find latest analysis with attestations
                 docs = table.query(KeyConditionExpression=boto3.dynamodb.conditions.Key('PK').eq('DOC'), ScanIndexForward=False)
                 analyzed = [d for d in docs['Items'] if d.get('analysis_id')]
                 if not analyzed:
@@ -433,19 +438,36 @@ def handle_attestations(event, context):
 
             result = table.query(KeyConditionExpression=boto3.dynamodb.conditions.Key('PK').eq(f'ATTESTATION#{analysis_id}') & boto3.dynamodb.conditions.Key('SK').begins_with('ATT#'))
             atts = result['Items']
-            # Parse JSON fields back
+
+            # Fetch live spend for auto-population
+            spend = _get_spend_summary()
+
             for a in atts:
                 for k in ('fields',):
                     if isinstance(a.get(k), str):
                         try: a[k] = json.loads(a[k])
                         except: pass
+                # Auto-populate fields with auto_source
+                for f in (a.get('fields') or []):
+                    src = f.get('auto_source')
+                    if not src:
+                        continue
+                    if src == 'ce_ytd_spend':
+                        f['auto_value'] = spend.get('ytd_spend', '')
+                    elif src == 'ce_service_count':
+                        f['auto_value'] = len(spend.get('current_month_by_service', {}))
+                    elif src.startswith('ce_service:'):
+                        svc_name = src.split(':', 1)[1]
+                        svcs = spend.get('current_month_by_service', {})
+                        f['auto_value'] = next((v for k, v in svcs.items() if svc_name.lower() in k.lower()), '')
+
             return resp(200, {'attestations': atts, 'analysis_id': analysis_id})
 
-        # POST — update attestation
+        # POST — update or complete attestation
         body = json.loads(event.get('body', '{}'))
         analysis_id = body['analysis_id']
         att_id = body['att_id']
-        action = body.get('action', 'update')  # 'update' or 'complete'
+        action = body.get('action', 'update')
 
         update_expr = 'SET #s = :s, updated_at = :u'
         expr_vals = {':s': 'completed' if action == 'complete' else 'in_progress', ':u': datetime.utcnow().isoformat()}
@@ -465,6 +487,34 @@ def handle_attestations(event, context):
             ExpressionAttributeNames=expr_names,
             ExpressionAttributeValues=expr_vals
         )
+
+        # Recurring: create next occurrence on complete
+        if action == 'complete':
+            att = table.get_item(Key={'PK': f'ATTESTATION#{analysis_id}', 'SK': f'ATT#{att_id}'}).get('Item', {})
+            freq = att.get('frequency', '')
+            due = att.get('next_due', '')
+            if freq and due:
+                try:
+                    due_dt = datetime.strptime(due, '%Y-%m-%d')
+                except: due_dt = None
+                if due_dt:
+                    months_add = {'Monthly': 1, 'Quarterly': 3, 'Semi-Annual': 6, 'Annual': 12}.get(freq, 0)
+                    if months_add:
+                        m = due_dt.month - 1 + months_add
+                        y = due_dt.year + m // 12
+                        m = m % 12 + 1
+                        d = min(due_dt.day, [31,29 if y%4==0 else 28,31,30,31,30,31,31,30,31,30,31][m-1])
+                        next_due = f'{y}-{m:02d}-{d:02d}'
+                        new_id = f"{att_id}-{next_due}"
+                        # Copy attestation with new due date
+                        new_item = {k: v for k, v in att.items() if k not in ('filled_fields', 'notes', 'updated_at')}
+                        new_item['SK'] = f'ATT#{new_id}'
+                        new_item['id'] = new_id
+                        new_item['next_due'] = next_due
+                        new_item['status'] = 'pending'
+                        new_item['created_at'] = datetime.utcnow().isoformat()
+                        table.put_item(Item=new_item)
+
         return resp(200, {'status': 'updated', 'att_id': att_id})
     except Exception as e:
         return resp(500, {'error': str(e)})

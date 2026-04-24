@@ -150,7 +150,7 @@ Resources:
     Properties:
       CodeUri: lambdas/
       Handler: api.handle_analyze_worker
-      Timeout: 180
+      Timeout: 300
       MemorySize: 512
       Policies:
         - S3ReadPolicy:
@@ -264,6 +264,10 @@ Resources:
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref RecommendationsTable
+        - Statement:
+            - Effect: Allow
+              Action: ce:GetCostAndUsage
+              Resource: '*'
       Events:
         Get:
           Type: HttpApi
