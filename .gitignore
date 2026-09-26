@@ -1,0 +1,24 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.env
+
+# SAM / CloudFormation
+serverless/.packaged.yaml
+serverless/.aws-sam/
+.aws-sam/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+*.Zone.Identifier
+
+# Logs
+*.log

@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Commitment Intelligent Platform</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f0f2f5;color:#333}
+.header{background:#232F3E;color:#fff;padding:14px 24px;display:flex;align-items:center;justify-content:space-between}
+.header h1{font-size:1.2em}.header small{color:#FF9900}
+.container{max-width:1200px;margin:0 auto;padding:20px}
+.card{background:#fff;border-radius:8px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.1);margin-bottom:16px}
+.grid{display:grid;gap:16px;margin-bottom:16px}
+.grid-4{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
+.grid-3{grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+.grid-2{grid-template-columns:1fr 1fr}
+.metric .val{font-size:1.4em;font-weight:700;color:#232F3E}.metric .lbl{color:#666;font-size:.85em;margin-top:4px}
+.metric .val.good{color:#28a745}.metric .val.danger{color:#dc3545}
+.btn{padding:8px 16px;border:none;border-radius:4px;cursor:pointer;font-size:.9em;font-weight:500;transition:.2s;display:inline-flex;align-items:center;gap:6px}
+.btn-primary{background:#FF9900;color:#fff}.btn-primary:hover{background:#e88900}
+.btn-accept{background:#28a745;color:#fff}.btn-reject{background:#dc3545;color:#fff}
+.btn-outline{background:transparent;border:1px solid #ccc;color:#333}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn-sm{padding:5px 10px;font-size:.8em}.btn-lg{padding:12px 24px;font-size:1em}
+
+.cloud-tabs{display:flex;background:#fff;border-radius:8px 8px 0 0;box-shadow:0 1px 3px rgba(0,0,0,.1);overflow:hidden}
+.cloud-tab{flex:1;padding:14px 20px;cursor:pointer;font-weight:600;font-size:.95em;color:#666;text-align:center;border-bottom:3px solid transparent;transition:.2s;display:flex;align-items:center;justify-content:center;gap:8px}
+.cloud-tab:hover{background:#f8f9fa}
+.cloud-tab.active{color:#232F3E;background:#fff}
+.cloud-tab[data-t="overview"].active{border-bottom-color:#232F3E}
+.cloud-tab[data-t="aws"].active{border-bottom-color:#FF9900;color:#FF9900}
+.cloud-tab[data-t="azure"].active{border-bottom-color:#0078D4;color:#0078D4}
+.cloud-tab[data-t="gcp"].active{border-bottom-color:#4285F4;color:#4285F4}
+.cloud-content{display:none}.cloud-content.active{display:block}
+
+.sub-tabs{display:flex;border-bottom:1px solid #e0e0e0;margin-bottom:16px}
+.sub-tab{padding:8px 16px;cursor:pointer;font-size:.85em;color:#888;border-bottom:2px solid transparent;transition:.2s}
+.sub-tab.active{color:#333;border-bottom-color:#FF9900;font-weight:600}
+.sub-content{display:none}.sub-content.active{display:block}
+
+.progress-bar{background:#e9ecef;border-radius:6px;height:12px;overflow:hidden;margin:6px 0}
+.progress-bar .fill{height:100%;border-radius:6px;transition:width .6s}
+.fill-green{background:#28a745}.fill-yellow{background:#ffc107}.fill-red{background:#dc3545}
+
+.commit-card{border-radius:8px;padding:16px;background:#fff;border-left:5px solid #ccc;box-shadow:0 1px 3px rgba(0,0,0,.08);margin-bottom:12px;cursor:pointer;transition:.2s}
+.commit-card:hover{box-shadow:0 2px 8px rgba(0,0,0,.12)}
+.commit-card.aws{border-left-color:#FF9900}.commit-card.azure{border-left-color:#0078D4}.commit-card.gcp{border-left-color:#4285F4}
+.credit-card{border:1px solid #e0e0e0;border-radius:8px;padding:14px;margin-bottom:10px}
+.credit-card.qualified{border-left:4px solid #28a745}.credit-card.partially_qualified{border-left:4px solid #ffc107}.credit-card.not_qualified{border-left:4px solid #dc3545}
+.rec-card{border:1px solid #e0e0e0;border-radius:8px;padding:16px;margin-bottom:12px}
+.rec-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.badge{padding:3px 8px;border-radius:12px;font-size:.75em;font-weight:600;color:#fff}
+.badge-high{background:#28a745}.badge-medium{background:#ffc107;color:#333}.badge-low{background:#dc3545}
+.rec-savings{font-size:1.1em;font-weight:700;color:#FF9900;margin-top:6px}
+.att-card{border:1px solid #e0e0e0;border-radius:8px;padding:16px;margin-bottom:12px}
+.att-card.pending{border-left:4px solid #ffc107}.att-card.completed{border-left:4px solid #28a745;opacity:.7}
+.att-due{font-size:.85em;padding:3px 8px;border-radius:12px;font-weight:600}
+.att-due.overdue{background:#dc3545;color:#fff}.att-due.soon{background:#ffc107;color:#333}.att-due.ok{background:#e0e0e0;color:#555}
+.att-fields{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0}
+.att-fields label{font-size:.8em;color:#666;display:block;margin-bottom:2px}
+.att-fields input{width:100%;padding:6px 8px;border:1px solid #ccc;border-radius:4px;font-size:.85em}
+.upload-zone{border:2px dashed #ccc;border-radius:8px;padding:24px;text-align:center;cursor:pointer;transition:.2s}
+.upload-zone:hover{border-color:#FF9900;background:#fff8f0}
+.upload-zone.has-file{border-color:#28a745;background:#f8fff9}
+.alert{padding:12px 16px;border-radius:6px;margin-bottom:12px;font-size:.9em}
+.alert-aws{background:#fff8f0;border:1px solid #FF9900}
+.alert-azure{background:#f0f5ff;border:1px solid #0078D4}
+.alert-gcp{background:#f0f4ff;border:1px solid #4285F4}
+.alert-info{background:#f0faff;border:1px solid #17a2b8}
+.alert-warn{background:#fffdf0;border:1px solid #ffc107}
+.alert-danger{background:#fff5f5;border:1px solid #dc3545}
+.toast-wrap{position:fixed;top:16px;right:16px;z-index:999;display:flex;flex-direction:column;gap:8px}
+.toast{background:#fff;padding:12px 16px;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.15);border-left:4px solid #28a745;min-width:280px;animation:slideIn .3s;font-size:.9em}
+.toast.error{border-left-color:#dc3545}.toast.info{border-left-color:#17a2b8}
+@keyframes slideIn{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}
+.spinner{display:inline-block;width:16px;height:16px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin .6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.empty{text-align:center;padding:24px;color:#999}
+canvas{max-height:260px}
+@media(max-width:768px){.grid-2,.grid-3,.grid-4{grid-template-columns:1fr}.cloud-tabs{flex-wrap:wrap}.cloud-tab{font-size:.8em;padding:10px}}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div><h1>🎯 Commitment Intelligent Platform</h1><small>Multi-Cloud Commitment Tracking</small></div>
+  <button class="btn btn-outline" style="color:#fff;border-color:#ffffff50" onclick="showSetup()">📄 Upload Documents</button>
+</div>
+
+<!-- SETUP OVERLAY -->
+<div id="setupOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:100;overflow-y:auto">
+<div class="container" style="max-width:700px;margin-top:40px;margin-bottom:40px">
+  <div class="card" style="position:relative">
+    <button class="btn btn-outline btn-sm" style="position:absolute;top:12px;right:12px" onclick="hideSetup()">✕ Close</button>
+    <h2 style="margin-bottom:16px">Upload Commitment Documents</h2>
+    <div class="sub-tabs" id="setupTabs">
+      <div class="sub-tab active" onclick="setupTab('aws')">☁️ AWS PPA</div>
+      <div class="sub-tab" onclick="setupTab('azure')">🔷 Azure MACC</div>
+      <div class="sub-tab" onclick="setupTab('gcp')">🔵 GCP EDP</div>
+    </div>
+    <div class="sub-content active" id="su-aws">
+      <div class="alert alert-aws"><strong>AWS PPA/EDP — Discount Stacking:</strong> RI/Savings Plans + PPA cross-service discounts compound for maximum savings.</div>
+      <div class="upload-zone" onclick="document.getElementById('fAws').click()"><strong>📄 Drop PPA/EDP PDF</strong> or click<input type="file" id="fAws" accept=".pdf" style="display:none"></div>
+      <div id="suInfoAws" style="margin-top:8px;font-size:.9em;color:#28a745;display:none"></div>
+    </div>
+    <div class="sub-content" id="su-azure">
+      <div class="alert alert-azure"><strong>Azure MACC — Bundled Licensing:</strong> MACC commitment is mixed with M365/Dynamics. Upload to isolate Azure consumption and track MCI credits.</div>
+      <div class="upload-zone" onclick="document.getElementById('fAzure').click()"><strong>📄 Drop MACC/EA PDF</strong> or click<input type="file" id="fAzure" accept=".pdf" style="display:none"></div>
+      <div id="suInfoAzure" style="margin-top:8px;font-size:.9em;color:#0078D4;display:none"></div>
+    </div>
+    <div class="sub-content" id="su-gcp">
+      <div class="alert alert-gcp"><strong>GCP EDP/PA — Non-Stacking:</strong> EDP, CUD, SUD discounts do not compound — only the deepest applies. Upload to detect overlap waste.</div>
+      <div class="upload-zone" onclick="document.getElementById('fGcp').click()"><strong>📄 Drop EDP/PA PDF</strong> or click<input type="file" id="fGcp" accept=".pdf" style="display:none"></div>
+      <div id="suInfoGcp" style="margin-top:8px;font-size:.9em;color:#4285F4;display:none"></div>
+    </div>
+    <div style="margin-top:16px;padding-top:12px;border-top:1px solid #eee;display:flex;justify-content:flex-end;gap:8px">
+      <button class="btn btn-primary btn-lg" onclick="analyzeAll()">🔍 Analyze All</button>
+      <button class="btn btn-outline" onclick="hideSetup()">Done</button>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- DASHBOARD -->
+<div class="container">
+  <div class="cloud-tabs">
+    <div class="cloud-tab active" data-t="overview" onclick="cloudTab('overview')">🌐 Overview</div>
+    <div class="cloud-tab" data-t="aws" onclick="cloudTab('aws')">☁️ AWS</div>
+    <div class="cloud-tab" data-t="azure" onclick="cloudTab('azure')">🔷 Azure</div>
+    <div class="cloud-tab" data-t="gcp" onclick="cloudTab('gcp')">🔵 GCP</div>
+  </div>
+
+  <!-- OVERVIEW -->
+  <div class="cloud-content active" id="cc-overview">
+    <div class="card">
+      <div class="grid grid-4">
+        <div class="metric"><div class="val" id="ovBurn">—</div><div class="lbl">Monthly Burn (All Clouds)</div></div>
+        <div class="metric"><div class="val" id="ovYtd">—</div><div class="lbl">YTD Spend</div></div>
+        <div class="metric"><div class="val" id="ovTarget">—</div><div class="lbl">Annual Target</div></div>
+        <div class="metric"><div class="val" id="ovStatus">—</div><div class="lbl">Status</div></div>
+      </div>
+    </div>
+    <div class="grid grid-3" id="ovCards"></div>
+    <div class="grid grid-2">
+      <div class="card"><h3 style="margin-bottom:8px">📈 Burn Rate vs Targets</h3><canvas id="ovBurnChart"></canvas></div>
+      <div class="card"><h3 style="margin-bottom:8px">💰 Credits Available</h3><canvas id="ovCreditChart"></canvas></div>
+    </div>
+    <div class="card"><h3 style="margin-bottom:8px">📋 Upcoming Deadlines</h3><div id="ovDeadlines"><div class="empty">Upload commitment documents to see deadlines</div></div></div>
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <h3 style="margin:0">🤖 Cross-Cloud Intelligence</h3>
+        <button class="btn btn-primary btn-sm" onclick="runCrossAnalysis()">🔍 Analyze</button>
+      </div>
+      <div id="ovAnalysis"><div class="empty">Click Analyze for cross-cloud commitment insights</div></div>
+    </div>
+  </div>
+
+  <!-- AWS -->
+  <div class="cloud-content" id="cc-aws">
+    <div class="card" style="border-left:4px solid #FF9900">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div><h3 style="margin:0;color:#FF9900">☁️ AWS Private Pricing Agreement</h3><span style="font-size:.85em;color:#666">Discount Stacking — RI/SP + PPA compound</span></div>
+        <button class="btn btn-outline btn-sm" onclick="showSetup();setupTab('aws')">📄 Upload PPA</button>
+      </div>
+    </div>
+    <div class="grid grid-4">
+      <div class="card metric"><div class="val" id="awsBurn">—</div><div class="lbl">Burn Rate</div></div>
+      <div class="card metric"><div class="val" id="awsYtd">—</div><div class="lbl">YTD Spend</div></div>
+      <div class="card metric"><div class="val" id="awsTarget">—</div><div class="lbl">Commitment</div></div>
+      <div class="card metric"><div class="val" id="awsNeeded">—</div><div class="lbl">Needed/mo</div></div>
+    </div>
+    <div class="card"><canvas id="awsBurnChart"></canvas></div>
+    <div class="sub-tabs"><div class="sub-tab active" onclick="provSub('aws','credits')">💰 Credits</div><div class="sub-tab" onclick="provSub('aws','att')">📋 Attestations</div><div class="sub-tab" onclick="provSub('aws','recs')">🎯 Recommendations</div></div>
+    <div class="sub-content active" id="aws-credits"><div id="awsCreditList"><div class="empty">Upload AWS PPA to see credits</div></div></div>
+    <div class="sub-content" id="aws-att"><div id="awsAttList"><div class="empty">No attestation deadlines</div></div></div>
+    <div class="sub-content" id="aws-recs"><div id="awsRecList"><div class="empty">No recommendations</div></div></div>
+  </div>
+
+  <!-- AZURE -->
+  <div class="cloud-content" id="cc-azure">
+    <div class="card" style="border-left:4px solid #0078D4">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div><h3 style="margin:0;color:#0078D4">🔷 Azure MACC — Consumption Commitment</h3><span style="font-size:.85em;color:#666">Bundled Licensing — Isolate from M365/Dynamics</span></div>
+        <button class="btn btn-outline btn-sm" onclick="showSetup();setupTab('azure')">📄 Upload MACC</button>
+      </div>
+    </div>
+    <div class="grid grid-4">
+      <div class="card metric"><div class="val" id="azBurn">—</div><div class="lbl">Burn Rate</div></div>
+      <div class="card metric"><div class="val" id="azYtd">—</div><div class="lbl">YTD Consumption</div></div>
+      <div class="card metric"><div class="val" id="azTarget">—</div><div class="lbl">MACC Target</div></div>
+      <div class="card metric"><div class="val" id="azNeeded">—</div><div class="lbl">Needed/mo</div></div>
+    </div>
+    <div class="alert alert-warn" id="azBundleAlert" style="display:none"><strong>⚠️ Bundled Licensing:</strong> <span id="azBundleText"></span></div>
+    <div class="card"><canvas id="azBurnChart"></canvas></div>
+    <div class="sub-tabs"><div class="sub-tab active" onclick="provSub('azure','mci')">💰 MCI Credits</div><div class="sub-tab" onclick="provSub('azure','poe')">📋 POE Deadlines</div><div class="sub-tab" onclick="provSub('azure','recs')">🎯 Recommendations</div></div>
+    <div class="sub-content active" id="azure-mci"><div id="azMciList"><div class="empty">Upload MACC for MCI credits</div></div></div>
+    <div class="sub-content" id="azure-poe"><div id="azPoeList"><div class="empty">No POE deadlines</div></div></div>
+    <div class="sub-content" id="azure-recs"><div id="azRecList"><div class="empty">No recommendations</div></div></div>
+  </div>
+
+  <!-- GCP -->
+  <div class="cloud-content" id="cc-gcp">
+    <div class="card" style="border-left:4px solid #4285F4">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div><h3 style="margin:0;color:#4285F4">🔵 GCP Enterprise Discount Program</h3><span style="font-size:.85em;color:#666">Non-Stacking — EDP/CUD/SUD compete, deepest wins</span></div>
+        <button class="btn btn-outline btn-sm" onclick="showSetup();setupTab('gcp')">📄 Upload EDP</button>
+      </div>
+    </div>
+    <div class="grid grid-4">
+      <div class="card metric"><div class="val" id="gcpBurn">—</div><div class="lbl">Burn Rate</div></div>
+      <div class="card metric"><div class="val" id="gcpYtd">—</div><div class="lbl">YTD Spend</div></div>
+      <div class="card metric"><div class="val" id="gcpTarget">—</div><div class="lbl">EDP Target</div></div>
+      <div class="card metric"><div class="val" id="gcpCud">—</div><div class="lbl">CUD Utilization</div></div>
+    </div>
+    <div class="alert alert-danger" id="gcpOverlapAlert" style="display:none"><strong>⚠️ Non-Stacking:</strong> <span id="gcpOverlapText"></span></div>
+    <div class="card"><canvas id="gcpBurnChart"></canvas></div>
+    <div class="sub-tabs"><div class="sub-tab active" onclick="provSub('gcp','credits')">💰 Credits & CUDs</div><div class="sub-tab" onclick="provSub('gcp','claims')">📋 Claims</div><div class="sub-tab" onclick="provSub('gcp','recs')">🎯 Recommendations</div></div>
+    <div class="sub-content active" id="gcp-credits"><div id="gcpCreditList"><div class="empty">Upload EDP for credits</div></div></div>
+    <div class="sub-content" id="gcp-claims"><div id="gcpClaimList"><div class="empty">No claims</div></div></div>
+    <div class="sub-content" id="gcp-recs"><div id="gcpRecList"><div class="empty">No recommendations</div></div></div>
+  </div>
+</div>
+
+<div class="toast-wrap" id="toasts"></div>
+
+<script>
+const API=(localStorage.getItem('CIP_API_URL')||'').trim()||(()=>{const u=prompt('Enter API URL:');if(u){localStorage.setItem('CIP_API_URL',u.trim().replace(/\/$/,''));location.reload();}return '';})();
+let recs=[],atts=[],analysisId=null,commitment=null,charts={};
+const $=id=>document.getElementById(id);
+function toast(m,t='success'){const e=document.createElement('div');e.className='toast '+t;e.textContent=m;$('toasts').appendChild(e);setTimeout(()=>e.remove(),4000);}
+function fmt(n){return '$'+Number(n||0).toLocaleString();}
+
+// Cloud tabs
+function cloudTab(t){document.querySelectorAll('.cloud-tab').forEach(e=>e.classList.remove('active'));document.querySelectorAll('.cloud-content').forEach(e=>e.classList.remove('active'));document.querySelector(`.cloud-tab[data-t="${t}"]`).classList.add('active');$('cc-'+t).classList.add('active');}
+
+// Provider sub-tabs
+function provSub(prov,name){
+  const p=$('cc-'+prov);
+  const tabs=[...p.querySelectorAll('.sub-tab')];
+  const contents=[...p.querySelectorAll('.sub-content')];
+  tabs.forEach(t=>t.classList.remove('active'));
+  contents.forEach(c=>c.classList.remove('active'));
+  const idx=tabs.findIndex(t=>t.textContent.toLowerCase().replace(/[^a-z]/g,'').includes(name.replace(/[^a-z]/g,'')));
+  if(idx>=0){tabs[idx].classList.add('active');contents[idx].classList.add('active');}
+}
+
+// Setup
+function showSetup(){$('setupOverlay').style.display='';}
+function hideSetup(){$('setupOverlay').style.display='none';loadAll();}
+function setupTab(n){$('setupTabs').querySelectorAll('.sub-tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('#setupOverlay .sub-content').forEach(c=>c.classList.remove('active'));
+  [...$('setupTabs').children].find(t=>t.textContent.toLowerCase().includes(n)).classList.add('active');
+  $('su-'+n).classList.add('active');}
+
+// File upload
+['aws','azure','gcp'].forEach(p=>{
+  const cap=p.charAt(0).toUpperCase()+p.slice(1);
+  const fi=$('f'+cap);if(!fi)return;
+  fi.onchange=async e=>{
+    const file=e.target.files[0];if(!file)return;
+    try{
+      const r=await(await fetch(`${API}/upload`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({filename:p+'_'+file.name,content_type:'application/pdf'})})).json();
+      await fetch(r.upload_url,{method:'PUT',headers:{'Content-Type':'application/pdf'},body:file});
+      localStorage.setItem('doc_'+p,JSON.stringify({id:r.doc_id,key:r.s3_key,name:file.name}));
+      const info=$('suInfo'+cap);info.style.display='block';info.textContent='✅ '+file.name+' uploaded';
+      toast(p.toUpperCase()+' document uploaded');
+    }catch(e){toast(e.message,'error');}
+  };
+});
+
+// Analyze all uploaded docs
+async function analyzeAll(){
+  const btn=event.target;btn.disabled=true;btn.innerHTML='<span class="spinner"></span> Analyzing...';
+  for(const p of['aws','azure','gcp']){
+    const doc=localStorage.getItem('doc_'+p);if(!doc)continue;
+    const{id,key}=JSON.parse(doc);
+    try{const d=await(await fetch(`${API}/analyze`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({doc_id:id,s3_key:key})})).json();
+      if(!d.error){analysisId=d.analysis_id;localStorage.setItem('aid',analysisId);}
+    }catch(e){toast(p+' failed','error');}
+  }
+  if(analysisId){
+    toast('Analyzing...','info');
+    for(let i=0;i<60;i++){
+      await new Promise(r=>setTimeout(r,3000));
+      const d=await(await fetch(`${API}/recommendations?analysis_id=${analysisId}`)).json();
+      if(d.status==='complete'){
+        recs=d.recommendations||[];commitment=d.commitment_summary||null;
+        try{atts=(await(await fetch(`${API}/attestations?analysis_id=${analysisId}`)).json()).attestations||[];}catch(e){}
+        toast(recs.length+' recommendations');hideSetup();loadAll();break;
+      }
+      if(d.status==='error'){toast(d.error||'Failed','error');break;}
+    }
+  }else toast('Upload a document first','info');
+  btn.disabled=false;btn.innerHTML='🔍 Analyze All';
+}
+
+// Data loading
+async function loadAll(){
+  try{const s=await(await fetch(`${API}/spend`)).json();renderOverview(s);}catch(e){}
+  if(recs.length){renderAwsCredits();renderRecs('awsRecList',recs);}
+  if(atts.length){renderAtts('awsAttList',atts);renderDeadlines();}
+}
+
+// Overview
+function renderOverview(spend){
+  const ytd=spend.ytd_spend||0;
+  const month=Object.values(spend.current_month_by_service||{}).reduce((a,b)=>a+b,0);
+  $('ovBurn').textContent=fmt(month)+'/mo';$('ovYtd').textContent=fmt(ytd);
+  const target=commitment?.years?.[0]?.minimum_commitment||commitment?.total_commitment||0;
+  $('ovTarget').textContent=target?fmt(target):'Upload docs';
+  if(target){
+    const me=new Date().getMonth()+1;const pct=(ytd/target*100).toFixed(0);
+    $('ovStatus').textContent=pct+'% '+(ytd>=target*(me/12)?'On Track':'Behind');
+    $('ovStatus').className='val '+(ytd>=target*(me/12)?'good':'danger');
+  }
+  // AWS metrics
+  $('awsBurn').textContent=fmt(month)+'/mo';$('awsYtd').textContent=fmt(ytd);
+  $('awsTarget').textContent=target?fmt(target):'Upload PPA';
+  if(target){const ml=12-(new Date().getMonth()+1);const need=Math.max(0,(target-ytd)/Math.max(ml,1));
+    $('awsNeeded').textContent=fmt(need)+'/mo';$('awsNeeded').className='val '+(need>month?'danger':'good');}
+  renderBurnChart('ovBurnChart','ov',ytd,month,target,'#FF9900');
+  renderBurnChart('awsBurnChart','aws',ytd,month,target,'#FF9900');
+  if(recs.length)renderCreditChart();
+  // Azure/GCP placeholders
+  $('azBundleAlert').style.display='block';$('azBundleText').textContent='Upload MACC to isolate Azure consumption from M365/Dynamics licensing.';
+  $('gcpOverlapAlert').style.display='block';$('gcpOverlapText').textContent='GCP discounts do NOT stack. Upload EDP to detect CUD/EDP overlap waste.';
+}
+
+function renderBurnChart(id,key,ytd,month,target,color){
+  if(charts[key])charts[key].destroy();
+  const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const cm=new Date().getMonth();const avg=ytd/Math.max(cm+1,1);
+  let cum=0;const actual=months.slice(0,cm+1).map(()=>{cum+=avg;return Math.round(cum);});
+  const proj=[];for(let i=0;i<12;i++)proj.push(i<=cm?actual[i]:Math.round(cum+avg*(i-cm)));
+  const ds=[{label:'Actual',data:actual,borderColor:color,backgroundColor:color+'20',fill:true,tension:.3},{label:'Projected',data:proj,borderColor:color+'60',borderDash:[5,5],pointRadius:0}];
+  if(target)ds.push({label:'Target',data:months.map((_,i)=>Math.round(target*(i+1)/12)),borderColor:'#dc3545',borderDash:[6,4],pointRadius:0,borderWidth:2});
+  charts[key]=new Chart($(id),{type:'line',data:{labels:months,datasets:ds},options:{responsive:true,scales:{y:{beginAtZero:true,ticks:{callback:v=>fmt(v)}}},plugins:{legend:{position:'top'}}}});
+}
+
+function renderCreditChart(){
+  if(charts.ovCredit)charts.ovCredit.destroy();
+  charts.ovCredit=new Chart($('ovCreditChart'),{type:'bar',data:{labels:recs.map(r=>r.credit_type||r.title||'').slice(0,8),datasets:[
+    {label:'Progress',data:recs.map(r=>Number(r.current_progress||0)).slice(0,8),backgroundColor:'#FF9900'},
+    {label:'Max',data:recs.map(r=>Number(r.max_credit_value||0)).slice(0,8),backgroundColor:'#e0e0e0'}
+  ]},options:{responsive:true,indexAxis:'y',scales:{x:{beginAtZero:true,ticks:{callback:v=>fmt(v)}}}}});
+}
+
+function renderDeadlines(){
+  const now=new Date();
+  const sorted=[...atts].filter(a=>a.status!=='completed').sort((a,b)=>(a.next_due||'9').localeCompare(b.next_due||'9'));
+  $('ovDeadlines').innerHTML=sorted.slice(0,8).map(a=>{
+    const due=a.next_due?new Date(a.next_due+'T00:00:00'):null;
+    const days=due?Math.ceil((due-now)/86400000):999;
+    const cls=days<0?'overdue':days<=14?'soon':'ok';
+    const lbl=days<0?Math.abs(days)+'d overdue':days+'d';
+    return `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #eee;font-size:.9em"><span>${a.name||a.id}</span><span class="att-due ${cls}">${lbl}</span></div>`;
+  }).join('')||'<div class="empty">No deadlines</div>';
+}
+
+// Credits
+function renderAwsCredits(){
+  $('awsCreditList').innerHTML=recs.map(r=>{
+    const q=r.qualification||'';const icon=q==='qualified'?'✅':q==='partially_qualified'?'⚠️':'❌';
+    const max=Number(r.max_credit_value||0),prog=Number(r.current_progress||0),pct=max?(prog/max*100).toFixed(0):0;
+    return `<div class="credit-card ${q}">
+      <div style="display:flex;justify-content:space-between"><strong>${icon} ${r.credit_type||r.title}</strong><span style="color:#FF9900;font-weight:600">${fmt(max)} max</span></div>
+      ${max?`<div class="progress-bar"><div class="fill ${pct>=75?'fill-green':pct>=25?'fill-yellow':'fill-red'}" style="width:${Math.min(pct,100)}%"></div></div>`:''}
+      <div style="font-size:.85em;color:#555;margin-top:4px">${r.reasoning||''}</div>
+      ${r.what_if?`<div style="background:#f0faff;border:1px solid #17a2b8;border-radius:4px;padding:8px;margin-top:8px;font-size:.85em">💡 ${r.what_if.scenario||''} → <strong style="color:#FF9900">${fmt(r.what_if.new_savings)}</strong></div>`:''}</div>`;
+  }).join('')||'<div class="empty">No credits</div>';
+}
+
+// Attestations
+function renderAtts(elId,list){
+  const el=$(elId);const now=new Date();
+  el.innerHTML=list.map((a,i)=>{
+    const fields=typeof a.fields==='string'?JSON.parse(a.fields):a.fields||[];
+    const filled=typeof a.filled_fields==='string'?JSON.parse(a.filled_fields||'{}'):a.filled_fields||{};
+    const due=a.next_due?new Date(a.next_due+'T00:00:00'):null;
+    const days=due?Math.ceil((due-now)/86400000):999;
+    const cls=days<0?'overdue':days<=14?'soon':'ok';
+    return `<div class="att-card ${a.status||'pending'}">
+      <div style="display:flex;justify-content:space-between;margin-bottom:6px"><strong>${a.name||a.id}</strong><span class="att-due ${cls}">${days<0?Math.abs(days)+'d overdue':days+'d'}</span></div>
+      <div style="font-size:.85em;color:#555">${a.description||''}</div>
+      ${a.status==='completed'?'<div style="color:#28a745;font-weight:600;margin-top:6px">✅ Completed</div>':`
+      <div class="att-fields" id="af${elId}${i}">${fields.map(f=>`<div><label>${f.label}</label><input type="text" data-field="${f.label}" value="${filled[f.label]||f.auto_value||''}"></div>`).join('')}</div>
+      <div style="margin-top:6px;display:flex;gap:8px">
+        <button class="btn btn-primary btn-sm" onclick="submitAtt('${elId}',${i},'update')">💾 Save</button>
+        <button class="btn btn-accept btn-sm" onclick="submitAtt('${elId}',${i},'complete')">✅ Complete</button></div>`}
+    </div>`;
+  }).join('')||'<div class="empty">No deadlines</div>';
+}
+
+// Recommendations
+function renderRecs(elId,list){
+  $(elId).innerHTML=list.map((r,i)=>`
+    <div class="rec-card"><div class="rec-header"><strong>${r.title||''}</strong><span class="badge badge-${r.confidence||'medium'}">${r.confidence||''}</span></div>
+    <div style="font-size:.85em;color:#555">${r.reasoning||''}</div><div class="rec-savings">Potential: ${fmt(r.potential_savings)}</div>
+    ${r.what_if?`<div style="background:#f0faff;border:1px solid #17a2b8;border-radius:4px;padding:8px;margin-top:8px;font-size:.85em">💡 ${r.what_if.scenario||''} → <strong style="color:#FF9900">${fmt(r.what_if.new_savings)}</strong></div>`:''}
+    <div style="margin-top:8px;display:flex;gap:8px" id="ra${elId}${i}">
+      <button class="btn btn-accept btn-sm" onclick="decide('${elId}',${i},'accepted')">✅ Accept</button>
+      <button class="btn btn-reject btn-sm" onclick="decide('${elId}',${i},'rejected')">❌ Reject</button></div></div>`).join('')||'<div class="empty">No recommendations</div>';
+}
+
+async function submitAtt(elId,i,action){
+  const a=atts[i];const c=$('af'+elId+i);
+  const filled={};if(c)c.querySelectorAll('input').forEach(el=>{if(el.dataset.field&&el.value)filled[el.dataset.field]=el.value;});
+  try{await fetch(`${API}/attestations`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({analysis_id:analysisId,att_id:a.id||a.SK?.split('#')[1],action,filled_fields:filled,name:a.name||''})});
+    if(action==='complete')a.status='completed';renderAtts('awsAttList',atts);renderDeadlines();toast(action==='complete'?'Completed':'Saved');
+  }catch(e){toast(e.message,'error');}
+}
+
+async function decide(elId,i,action){
+  const r=recs[i];
+  try{await fetch(`${API}/decision`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({analysis_id:analysisId,rec_id:r.id,action})});
+    $('ra'+elId+i).innerHTML=`<span style="color:${action==='accepted'?'#28a745':'#dc3545'};font-weight:600">${action.toUpperCase()}</span>`;toast(r.title+' — '+action);
+  }catch(e){toast(e.message,'error');}
+}
+
+// Cross-cloud analysis
+async function runCrossAnalysis(){
+  const el=$('ovAnalysis');el.innerHTML='<div class="empty">⏳ Analyzing...</div>';
+  try{
+    const d=await(await fetch(`${API}/multicloud-analyze`,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})).json();
+    if(d.error)throw new Error(d.error);const a=d.analysis||{};
+    let h=`<div class="alert alert-info"><strong>📋</strong> ${a.summary||''}</div>`;
+    (a.consolidation_opportunities||[]).forEach(o=>{h+=`<div class="rec-card" style="border-left:4px solid #17a2b8"><div class="rec-header"><strong>${o.title||''}</strong></div><div style="font-size:.85em;color:#555">${o.recommended_action||''}</div><div class="rec-savings">${{'low':'🟢','medium':'🟡','high':'🔴'}[o.effort]||''} Save ~${fmt(o.estimated_savings)}/mo</div></div>`;});
+    (a.risk_flags||[]).forEach(r=>{h+=`<div style="padding:6px 0;border-bottom:1px solid #eee;font-size:.9em">${{'high':'🔴','medium':'🟡','low':'🟢'}[r.severity]||''} <strong>${r.title}</strong> — ${r.detail||''}</div>`;});
+    el.innerHTML=h;
+  }catch(e){el.innerHTML=`<div class="empty" style="color:#dc3545">❌ ${e.message}</div>`;}
+}
+
+// Init
+(async function(){
+  const aid=localStorage.getItem('aid');
+  if(aid){analysisId=aid;
+    try{const d=await(await fetch(`${API}/recommendations?analysis_id=${aid}`)).json();if(d.status==='complete'){recs=d.recommendations||[];commitment=d.commitment_summary||null;}}catch(e){}
+    try{atts=(await(await fetch(`${API}/attestations?analysis_id=${aid}`)).json()).attestations||[];}catch(e){}
+  }
+  loadAll();
+})();
+</script>
+</body>
+</html>
